@@ -238,9 +238,8 @@ class App:
 
         self.transform = None        # Transform, fitted in step 2
         self.oct_valid = None        # OCT valid-tissue mask (oct frame)
-        self.imm_print = None        # immuno print-body mask (imm frame)
-        self.roi_mask = None         # full mapped ROI (imm frame) — objective 1's full ROI
-        self.aoi_mask = None         # roi ∩ imm_print — the corresponding/"eerlijk" area
+        self.roi_mask = None         # mapped OCT footprint in the immuno frame
+        self.aoi_mask = None         # the corresponding region = roi (overlay-defined; used for detection)
 
         self.manual_mask = None      # optional extra manual restriction within the AOI
         self.region_mode = None      # None | 'rect' | 'poly' (step-3 immuno panel drawing)
@@ -443,12 +442,13 @@ class App:
         oct_gray = cv2.cvtColor(self.oct_bgr, cv2.COLOR_BGR2GRAY)
         imm_gray = self.imm_bgr[:, :, 2]
         oct_valid = D._valid_oct(oct_gray)
-        imm_print = D._valid_print(imm_gray)
         Hh, Ww = imm_gray.shape
-        roi, overlap = A.compute_aoi(T, oct_valid, imm_print, Hh, Ww)
+        # The region is defined SOLELY by the registration overlay: the mapped OCT footprint.
+        # (No separate print-body detection — that could pick the wrong area; the overlay decides.)
+        roi, _ = A.compute_aoi(T, oct_valid, np.ones((Hh, Ww), np.uint8), Hh, Ww)
 
-        self.transform, self.oct_valid, self.imm_print = T, oct_valid, imm_print
-        self.roi_mask, self.aoi_mask = roi, overlap
+        self.transform, self.oct_valid = T, oct_valid
+        self.roi_mask = self.aoi_mask = roi
         # a new overlay invalidates any previously tuned/computed pore detections
         self.det_o = self.det_i_reg = self.det_i_top = self.det_i = None
         self.manual_mask = None; self._rect = None; self._poly = []; self.region_mode = None
@@ -456,13 +456,12 @@ class App:
         preview = self._build_overlay_preview()
         self.p2_overlay.set_image(preview)
         info = T.describe()
-        cov = 100 * overlap.sum() / max(roi.sum(), 1)
         self.l2_stats.config(text=(
             f"Transform {info['kind']}: residu {info['residual_mean_px']:.1f} px gem "
             f"(max {info['residual_max_px']:.1f}), schaal {info['scale']:.3f}, rotatie "
             f"{info['rotation_deg']:.1f}°, {info['n_points']} punten.\n"
-            f"Overeenkomend gebied (AOI): {int(overlap.sum())} px² · {cov:.0f}% van het volledig "
-            f"gemapte OCT-gebied valt binnen de immuno-afdruk."))
+            f"Overeenkomend gebied (oranje) = {int(roi.sum())} px². Controleer of dit gebied écht "
+            f"op de afdruk ligt; poriën worden hierbinnen geteld."))
         if info["residual_mean_px"] > 25:
             self.l2_stats.config(fg="#f80")
             messagebox.showwarning("porepair", "Hoog residu — controleer de ankerpunten (meer/beter verspreid).")
@@ -595,7 +594,12 @@ class App:
             min_area_frac=minf, max_area_frac=maxf, merged_blobs=self.merged_var.get())
         self.imm_primary = self.imm_method.get()
         self.det_i = self.det_i_reg if self.imm_primary == "region" else self.det_i_top
-        disp = self._display(self.det_i)
+        # show the OPTIMISED image (raw red -> MATLAB white/black balance) that detection
+        # actually thresholds, so it is transparent which image is used (region detector only)
+        if self.imm_primary == "region":
+            disp = D.draw_regions(self.det_i_reg["gray"], self.det_i_reg, on_optimized=True)
+        else:
+            disp = self._display(self.det_i)
         self.p3_imm.set_image(disp) if reset_view else self.p3_imm.update_image(disp)
         self.det_info.config(text=f"region {len(self.det_i_reg['points'])} · "
                                   f"top-hat {len(self.det_i_top['points'])} · primair: {self.imm_primary}")
