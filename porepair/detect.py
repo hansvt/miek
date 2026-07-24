@@ -176,7 +176,7 @@ def detect_regions_imm(image_bgr, channel="red", region_mask=None, optimize=True
                        circularity_thresh=0.15, solidity_thresh=0.40, max_eccentricity=0.97,
                        merged_blobs="split", bin_method="otsu", bin_thresh=200,
                        close_radius=0, stretch_low=0.01, stretch_high=0.99,
-                       isolate=True, tophat_radius=None):
+                       isolate=True, tophat_radius=None, thr_mult=1.0):
     """Region/centroid immuno pore detection (WI-1 refined by annotation_improvement_plan).
 
     Pipeline: white/black balance (WI-A, MATLAB imadjust stretch) → estimate pore size (WI-B)
@@ -213,6 +213,7 @@ def detect_regions_imm(image_bgr, channel="red", region_mask=None, optimize=True
     else:
         vals = work[valid > 0]
         thr = float(threshold_otsu(vals)) if vals.size else 0.0
+    thr *= float(thr_mult)                             # >1 = stricter -> drops faint noise beads
     bw = ((work > thr) & (valid > 0)).astype(np.uint8)
     if close_radius and close_radius > 0:             # MATLAB imclose(strel('disk',2))
         bw = cv2.morphologyEx(bw, cv2.MORPH_CLOSE, disk(int(close_radius)).astype(np.uint8))
@@ -256,7 +257,7 @@ def detect_regions_imm(image_bgr, channel="red", region_mask=None, optimize=True
                         "merged_blobs": merged_blobs, "bin_method": bin_method,
                         "threshold": round(thr, 1), "close_radius": close_radius,
                         "isolate_beads": bool(isolate), "tophat_radius": int(tophat_radius),
-                        "optimize": opt_params})
+                        "thr_mult": round(float(thr_mult), 2), "optimize": opt_params})
 
 
 def draw_regions(gray, det, color=(0, 0, 255), number=False, on_optimized=False):
