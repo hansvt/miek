@@ -52,7 +52,8 @@ def cmd_detect(args):
                                  circularity_thresh=args.imm_circularity, solidity_thresh=args.imm_solidity,
                                  max_eccentricity=args.imm_eccentricity, merged_blobs=args.merged_blobs,
                                  bin_method=args.imm_bin, bin_thresh=args.imm_bin_thresh,
-                                 close_radius=args.imm_close)
+                                 close_radius=args.imm_close, isolate=not args.imm_no_isolate,
+                                 pore_diam=(args.imm_pore_diam or None))
     primary = i_reg if args.imm_detect == "region" else i_top
     reasons = {}
     for r in i_reg["rejections"]:
@@ -143,6 +144,8 @@ def main(argv=None):
     d.add_argument("--imm-tophat", type=int, default=11, help="top-hat detector radius (comparison detector)")
     d.add_argument("--imm-min-area-frac", type=float, default=0.15, help="region: min blob area / median")
     d.add_argument("--imm-max-area-frac", type=float, default=6.0, help="region: max blob area / median")
+    d.add_argument("--imm-pore-diam", type=float, default=0.0, help="region: pore diameter px (0=auto)")
+    d.add_argument("--imm-no-isolate", action="store_true", help="region: skip top-hat bead isolation")
     d.add_argument("--imm-circularity", type=float, default=0.15, help="region: min circularity")
     d.add_argument("--imm-solidity", type=float, default=0.40, help="region: min solidity")
     d.add_argument("--imm-eccentricity", type=float, default=0.97, help="region: max eccentricity")

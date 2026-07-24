@@ -175,15 +175,17 @@ def detect_regions_imm(image_bgr, channel="red", region_mask=None, optimize=True
                        pore_diam=None, min_area_frac=0.15, max_area_frac=6.0,
                        circularity_thresh=0.15, solidity_thresh=0.40, max_eccentricity=0.97,
                        merged_blobs="split", bin_method="otsu", bin_thresh=200,
-                       close_radius=0, stretch_low=0.01, stretch_high=0.99):
+                       close_radius=0, stretch_low=0.01, stretch_high=0.99,
+                       isolate=True, tophat_radius=None):
     """Region/centroid immuno pore detection (WI-1 refined by annotation_improvement_plan).
 
     Pipeline: white/black balance (WI-A, MATLAB imadjust stretch) → estimate pore size (WI-B)
-    → binarise (Otsu, or MATLAB-style fixed threshold) → connected components → scale-aware
-    size band + shape filters with logged rejection reasons (WI-C). Merged blobs are split
-    (watershed) or rejected. `region_mask` (WI-G) restricts everything to a user-selected area;
-    if None the print body is used. Returns kept centroids + per-region shape metrics AND a
-    `rejections` list (reason per discarded blob) for auditing.
+    → **isolate individual pore beads** with a white top-hat that removes the continuous ridge
+    (else the beads on a ridge merge into one elongated blob) → binarise (Otsu, or fixed
+    threshold) → connected components → scale-aware size band + shape filters with logged
+    rejection reasons (WI-C); merged beads are split (watershed) or rejected. `region_mask`
+    (WI-G) restricts everything to a user-selected area. Returns kept centroids + per-region
+    shape metrics AND a `rejections` list (reason per discarded blob).
     """
     gray = image_bgr[:, :, CHANNELS[channel]] if image_bgr.ndim == 3 else image_bgr
     valid = (region_mask.astype(np.uint8) if region_mask is not None else _valid_print(gray))
@@ -194,18 +196,24 @@ def detect_regions_imm(image_bgr, channel="red", region_mask=None, optimize=True
     else:
         opt, opt_params = gray, {"method": "none"}
 
-    diam = pore_diam or estimate_pore_diameter(opt, valid)
+    diam = pore_diam or max(8.0, estimate_pore_diameter(opt, valid))   # floor: auto-Otsu underestimates
     med_area = np.pi * (diam / 2.0) ** 2
     min_area = max(3.0, min_area_frac * med_area)
     max_area = max_area_frac * med_area
     split_min_dist = max(3.0, 0.7 * diam)
 
-    if bin_method == "fixed":                         # MATLAB: grayImg > 240 after stretch
+    # isolate beads: a white top-hat (radius ~ bead size) suppresses the broad ridge so each
+    # pore bead remains a separate bump — without this, beads along a ridge fuse into segments
+    if tophat_radius is None:
+        tophat_radius = int(max(6, round(1.4 * diam)))
+    work = white_tophat(opt, disk(int(tophat_radius))).astype(np.float32) if isolate else opt.astype(np.float32)
+
+    if bin_method == "fixed":
         thr = float(bin_thresh)
     else:
-        vals = opt[valid > 0]
+        vals = work[valid > 0]
         thr = float(threshold_otsu(vals)) if vals.size else 0.0
-    bw = ((opt > thr) & (valid > 0)).astype(np.uint8)
+    bw = ((work > thr) & (valid > 0)).astype(np.uint8)
     if close_radius and close_radius > 0:             # MATLAB imclose(strel('disk',2))
         bw = cv2.morphologyEx(bw, cv2.MORPH_CLOSE, disk(int(close_radius)).astype(np.uint8))
     lab = label(bw)
@@ -247,6 +255,7 @@ def detect_regions_imm(image_bgr, channel="red", region_mask=None, optimize=True
                         "solidity_thresh": solidity_thresh, "max_eccentricity": max_eccentricity,
                         "merged_blobs": merged_blobs, "bin_method": bin_method,
                         "threshold": round(thr, 1), "close_radius": close_radius,
+                        "isolate_beads": bool(isolate), "tophat_radius": int(tophat_radius),
                         "optimize": opt_params})
 
 

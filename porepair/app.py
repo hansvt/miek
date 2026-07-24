@@ -504,15 +504,19 @@ class App:
         self.imm_method = tk.StringVar(value="region")
         ttk.Combobox(dc, textvariable=self.imm_method, values=["region", "tophat"], width=8,
                      state="readonly").pack(side="left", padx=2)
+        self.imm_diam = tk.StringVar(value="0")        # pore diameter px; 0 = auto-estimate
         self.imm_circ = tk.StringVar(value="0.15")
         self.imm_minfrac = tk.StringVar(value="0.15")
         self.imm_maxfrac = tk.StringVar(value="6.0")
-        for lbl, var, w in [("circ", self.imm_circ, 5), ("min-frac", self.imm_minfrac, 5),
-                            ("max-frac", self.imm_maxfrac, 5)]:
+        for lbl, var, w in [("diam px (0=auto)", self.imm_diam, 6), ("circ", self.imm_circ, 5),
+                            ("min-frac", self.imm_minfrac, 5), ("max-frac", self.imm_maxfrac, 5)]:
             tk.Label(dc, text=lbl, fg="#ccc", bg="#111").pack(side="left", padx=(8, 1))
             tk.Entry(dc, textvariable=var, width=w).pack(side="left")
+        self.isolate_var = tk.BooleanVar(value=True)
+        tk.Checkbutton(dc, text="kraal-isolatie", variable=self.isolate_var, fg="#ccc", bg="#111",
+                       selectcolor="#333", activebackground="#111", activeforeground="#fff").pack(side="left", padx=6)
         self.merged_var = tk.StringVar(value="split")
-        tk.Label(dc, text="merged", fg="#ccc", bg="#111").pack(side="left", padx=(8, 1))
+        tk.Label(dc, text="merged", fg="#ccc", bg="#111").pack(side="left", padx=(6, 1))
         ttk.Combobox(dc, textvariable=self.merged_var, values=["split", "reject"], width=7,
                      state="readonly").pack(side="left")
         tk.Button(dc, text="↻ her-detecteer", command=self.redetect_imm).pack(side="left", padx=10)
@@ -586,12 +590,17 @@ class App:
         if pr is None:
             return
         circ, minf, maxf = pr
+        try:
+            pd = float(self.imm_diam.get())
+        except ValueError:
+            pd = 0.0
         mask = self._effective_mask()
         self.status.config(text="immuno detecteren in het overeenkomende gebied…"); self.root.update()
         self.det_i_top = D.detect(self.imm_bgr, mode="imm")
         self.det_i_reg = D.detect_regions_imm(
             self.imm_bgr, region_mask=mask, circularity_thresh=circ,
-            min_area_frac=minf, max_area_frac=maxf, merged_blobs=self.merged_var.get())
+            min_area_frac=minf, max_area_frac=maxf, merged_blobs=self.merged_var.get(),
+            isolate=self.isolate_var.get(), pore_diam=(pd if pd > 0 else None))
         self.imm_primary = self.imm_method.get()
         self.det_i = self.det_i_reg if self.imm_primary == "region" else self.det_i_top
         # show the OPTIMISED image (raw red -> MATLAB white/black balance) that detection
