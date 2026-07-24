@@ -3,10 +3,18 @@
 CLI-pakket in `porepair/` dat de hele pijplijn ([[pipeline-overview]]) uitvoert voor
 willekeurige OCT+immuno-beeldparen. Volledige handleiding: `porepair/README.md`.
 
-## Desktop-app (aanbevolen)
-`python -m porepair.app` (of `python -m porepair gui`) opent één venster: beelden kiezen →
-auto-detectie → punten klikken (pan/zoom/roteren) → "Analyse + opslaan". Code: `porepair/app.py`
-(Tkinter, geen extra installatie). Hergebruikt dezelfde modules als de CLI.
+## Desktop-app (aanbevolen) — 3-staps wizard
+`python -m porepair.app` (of `python -m porepair gui`). Code: `porepair/app.py` (Tkinter, geen
+extra installatie). Drie stappen, met een stepper bovenin:
+1. **Beelden** — alleen selecteren, geen detectie.
+2. **Overlay** — ankerpunten klikken → transform fitten → preview van het **overeenkomende
+   gebied (AOI)** vóórdat er iets gedetecteerd wordt (`analyze.compute_aoi()`, gedeeld met de
+   analysestap zodat preview = werkelijkheid).
+3. **Poriën** — detectie (incl. immuno-enhancement, [[pore-detection]]) draait **binnen die AOI**;
+   tunen + optionele extra rechthoek/polygoon-beperking; dan "Analyse + opslaan".
+
+Waarom deze volgorde: detectie tunen op het hele beeld is zinloos buiten het gebied dat toch met
+de andere modaliteit overeenkomt. Zie `decisions.md` (2026-07-24).
 
 ## Drie stappen (CLI)
 ```bash

@@ -20,22 +20,34 @@ Zet je eigen beelden in een map `images\` (de vingerafdrukbeelden zitten **niet*
 ```bash
 python -m porepair.app
 ```
-Stappen in het venster:
+De app is een wizard van **3 stappen** — poriën worden pas berekend nadat je weet welk gebied
+in beide beelden overeenkomt.
 
-1. **1. Open OCT…** — kies het OCT-beeld (poriën = witte puntjes; worden meteen gedetecteerd).
-2. **2. Open immunolabel…** — kies het immuno-beeld (poriën = rode kralen).
-3. **Regio afbakenen** — klik **▭ regio tekenen** en sleep een rechthoek op het immuno-beeld
-   (of **regio-masker…** om een maskerbeeld te laden). Detectie draait alléén binnen die regio —
-   aanbevolen, want op het volledige ruwe beeld overdetecteert het (ridges). **✕ regio wissen** reset.
-   De immuno-optimalisatie (wit/zwart-balans) is de MATLAB `imadjust`/`stretchlim`-stretch.
-4. **Immuno-detectie tunen** — pas **circ / min-frac / max-frac** aan, kies **merged = split/reject**,
-   klik **↻ her-detecteer immuno**. Herhaal tot de poriën goed gemarkeerd staan (verschilt per beeld).
-5. **Ankerpunten klikken** — klik een herkenbaar punt in **OCT** (links), dan hetzelfde in
-   **immuno** (rechts). Herhaal **4–8 paren**, goed verspreid.
-   Per beeld: slepen = pannen · wiel = zoomen · ⟲/⟳ + schuif = roteren · "passend" = terug.
-6. **Instellen** (bovenin): **OCT-grootte** in mm, **transform** (affine), evt. **match k**
-   en **poriën-verfijning**.
-7. **3. Analyse + opslaan** — kies een map; het rapport opent automatisch.
+### Stap 1 — Beelden selecteren (geen detectie)
+- **Open OCT…** en **Open immunolabel…** — beelden worden alleen getoond, er wordt nog niets
+  gedetecteerd.
+- **Volgende: overlay maken →** zodra beide beelden geladen zijn.
+
+### Stap 2 — Overlay maken (ankerpunten → het overeenkomende gebied)
+- Klik een herkenbaar punt in **OCT** (links), dan hetzelfde punt in **immunolabel** (rechts).
+  Herhaal **4–8 paren**, goed verspreid. Per beeld: slepen = pannen · wiel = zoomen ·
+  ⟲/⟳ + schuif = roteren · "passend" = terug.
+- Stel **OCT-grootte** (mm) en **transform** (affine) in.
+- **Bereken overlay →** fit de transform en toont de overlay: OCT (magenta) op immuno (groen),
+  met het **overeenkomende gebied (AOI)** in oranje omlijnd — dit is precies het gebied waarin
+  in stap 3 wordt geënhanced en geteld.
+- Niet goed? **← Punten aanpassen** om terug te gaan en te herzien.
+- **Volgende: poriën detecteren →** als de overlay klopt.
+
+### Stap 3 — Enhancen + poriën berekenen (in het overeenkomende gebied)
+- OCT- en immuno-poriën worden nu gedetecteerd, **beperkt tot het gebied uit stap 2**. Immuno
+  wordt eerst geënhanced met de MATLAB wit/zwart-balans (`imadjust`/`stretchlim`), binnen dat gebied.
+- **Immuno-detectie tunen** — pas **circ / min-frac / max-frac** aan, kies **merged = split/reject**,
+  klik **↻ her-detecteer**. Herhaal tot de poriën goed gemarkeerd staan (verschilt per beeld).
+- **(optioneel) extra beperking** — teken een **▭ rechthoek** of **⬠ polygoon** bovenop het
+  overeenkomende gebied als je nog specifieker wilt selecteren; **✕ wissen** reset.
+- Stel **match k**, **poriën-verfijning** en **match-methode** (mutual-nn/matlab) in.
+- **Analyse + opslaan** — kies een map; het rapport opent automatisch.
 
 ### Handmatig bijwerken (vangnet)
 Is de auto-detectie niet perfect? Open **`imm_curator.html`** uit de outputmap → klik poriën

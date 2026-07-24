@@ -17,6 +17,9 @@
       WI-3 AOI-overlay, WI-4 matchmarge, WI-5 NN-tabel + genummerde kaarten,
       WI-6 `results.xlsx`, WI-7 `protocol.docx`, WI-8 `overlay_viewer.html`.
 
+- [x] App herbouwd als 3-staps wizard (beelden → overlay/AOI → enhance+detecteer binnen AOI).
+      `analyze.compute_aoi()` uitgefactored zodat stap-2-preview = werkelijke AOI. Getest via
+      `work/test_wizard.py` (headless flow-simulatie).
 - [x] Betere immuno-annotatie / artefact-reductie (`annotation_improvement_plan.md`):
       optimize_imm (A), schaal-params (B), rijk vormfilter + verwerp-redenen (C), validatie
       333≈316 (D), regio-masker (G), curator + --imm-points (E), doorgetrokken (F).

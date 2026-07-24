@@ -1,5 +1,27 @@
 # Decisions (newest first)
 
+## 2026-07-24 — App herbouwd als 3-staps wizard: overlay vóór poriën-detectie
+**Besluit:** `porepair/app.py` is herstructureerd van "open beelden → detecteer meteen → klik
+punten → analyseer" naar een expliciete **3-staps wizard**:
+1. **Beelden selecteren** — geen enkele detectie.
+2. **Overlay maken** — ankerpunten klikken → transform fitten → **AOI** (overeenkomend gebied)
+   berekenen en tonen als preview (magenta OCT op groen immuno, AOI oranje omlijnd) vóórdat
+   er één porie gedetecteerd is.
+3. **Enhancen + poriën berekenen** — detectie (incl. de MATLAB wit/zwart-balans voor immuno)
+   draait nu **binnen de AOI uit stap 2**, niet blind over het hele beeld.
+
+**Waarom:** poriën-detectie tunen op het volledige beeld is zinloos als een groot deel ervan
+buiten het gebied valt dat met de andere modaliteit overeenkomt — je ziet dan ruis/artefacten
+die toch worden weggegooid. Door de AOI eerst vast te leggen (via registratie) en dáárna pas te
+detecteren, tunet de gebruiker direct op de relevante data, en is de vroegere handmatige
+rechthoek/polygoon (nog beschikbaar als **optionele extra verfijning bovenop** de AOI) niet meer
+de primaire manier om het gebied te bepalen.
+
+**Implementatie:** `analyze.compute_aoi()` uitgefactored (was inline in `run()`) zodat zowel de
+CLI/GUI-analysestap als de nieuwe stap-2-preview in de app dezelfde AOI-berekening gebruiken —
+wat je in stap 2 ziet is exact het gebied dat in stap 3 wordt gebruikt. Getest met een headless
+smoke-test (`work/test_wizard.py`) die de volledige flow simuleert zonder file-dialogs.
+
 ## 2026-07-24 — Betere immuno-annotatie / artefact-reductie (annotation_improvement_plan.md)
 Immuno-detectie herzien: **optimaliseren → Otsu → regionprops → rijk vormfilter met verwerp-reden**
 i.p.v. tophat-puntmaxima. Kern-inzichten: (1) de referentie "316 poriën" = Otsu op het handmatig

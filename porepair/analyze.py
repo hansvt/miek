@@ -92,6 +92,25 @@ def _matlab_match(Om, I, oct_area_um, imm_area_um, thr=0.1):
     return shared, {s[0] for s in shared}, {s[1] for s in shared}
 
 
+def compute_aoi(T, oct_valid, imm_print, Hh, Ww):
+    """Forward-map the OCT valid-tissue mask through transform T into the immuno frame to get
+    `roi` (= objective-1's full ROI expressed in immuno pixels), then intersect with the
+    immuno print body for `overlap` (= the AOI / "eerlijk gebied", where both modalities have
+    signal). Shared by the CLI/GUI analyze step and the app's step-2 "compute overlay" preview,
+    so the AOI the user sees before detection is exactly the AOI used for counting."""
+    ys, xs = np.where(oct_valid > 0)
+    sub = slice(None, None, 3)
+    mapped = T.apply(np.stack([xs[sub], ys[sub]], 1).astype(float))
+    roi = np.zeros((Hh, Ww), np.uint8)
+    mx = np.clip(mapped[:, 0].astype(int), 0, Ww - 1)
+    my = np.clip(mapped[:, 1].astype(int), 0, Hh - 1)
+    roi[my, mx] = 1
+    roi = cv2.morphologyEx(roi, cv2.MORPH_CLOSE, np.ones((15, 15), np.uint8))
+    roi = cv2.morphologyEx(roi, cv2.MORPH_OPEN, np.ones((7, 7), np.uint8))
+    overlap = ((roi > 0) & (imm_print > 0)).astype(np.uint8)
+    return roi, overlap
+
+
 def _mutual_match(Om, I, radius):
     tO, tI = cKDTree(Om), cKDTree(I)
     dO, jO = tI.query(Om)
@@ -177,18 +196,7 @@ def run(out_dir, points_path, oct_mm=(10.0, 10.0), transform_kind="affine",
     tinfo["residual_after_refine_px"] = round(res1_mean, 2)
     tinfo["n_pore_pairs_used"] = n_pore_pairs
     Om = T.apply(O)
-
-    # ROI in immuno frame = forward-mapped OCT valid mask (works for any transform)
-    ys, xs = np.where(oct_valid > 0)
-    sub = slice(None, None, 3)
-    mapped = T.apply(np.stack([xs[sub], ys[sub]], 1).astype(float))
-    roi = np.zeros((Hh, Ww), np.uint8)
-    mx = np.clip(mapped[:, 0].astype(int), 0, Ww - 1)
-    my = np.clip(mapped[:, 1].astype(int), 0, Hh - 1)
-    roi[my, mx] = 1
-    roi = cv2.morphologyEx(roi, cv2.MORPH_CLOSE, np.ones((15, 15), np.uint8))
-    roi = cv2.morphologyEx(roi, cv2.MORPH_OPEN, np.ones((7, 7), np.uint8))
-    overlap = ((roi > 0) & (imm_print > 0)).astype(np.uint8)
+    roi, overlap = compute_aoi(T, oct_valid, imm_print, Hh, Ww)
 
     ii = roi[np.clip(Ipts[:, 1].astype(int), 0, Hh - 1),
              np.clip(Ipts[:, 0].astype(int), 0, Ww - 1)] > 0
