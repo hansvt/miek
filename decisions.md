@@ -1,0 +1,74 @@
+# Decisions (newest first)
+
+## 2026-07-24 — WI-2/3/4/6/7/8 afgerond (rest van implementation_plan.md)
+- **WI-4** matchmarge: straal = `match_frac·NN + k·mediaan(regio-straal)` (k default 0,5); mutual-NN ongemoeid.
+- **WI-2** registratie-verfijning met poriën-correspondenties (ankerpunten ×3 gewogen): **default UIT**.
+  Op deze dataset verhoogde het juist het ankerpunt-residu (4,8→6,2 px), dus niet standaard aan; rapport toont beide residuen.
+- **WI-3** tweede overlay `overlay_aoi.png` (alleen AOI, daarbuiten gedimd); AOI = eerlijk gebied.
+- **WI-8** interactieve `overlay_viewer.html` (pan/zoom/rotate + cross-fade OCT↔immuno).
+- **WI-6** `results.xlsx` (Summary/Transform/Config/Matched_Pairs/OCT_Pores/Immuno_Pores/Matched_NN).
+- **WI-7** `protocol.docx` (methoden-sectie, gevuld uit de run) — voor publicatie herschrijfbaar.
+Extra deps: matplotlib, pandas, openpyxl, python-docx (zie `requirements.txt`).
+
+## 2026-07-24 — WI-1 immuno region-detectie + WI-5 NN-tabel/kaarten (uit implementation_plan.md)
+**WI-1:** immuno-poriën nu via **region/centroid** i.p.v. top-hat puntmaxima. Aanpak:
+white-tophat (radius 11) op het ruwe rode kanaal verwijdert de continue ridge → de kralen
+(poriën) blijven als losse bobbels → Otsu → circulariteit ≥ 0,40, min-area 15 px → centroïden
++ equiv_radius. Dit gaf losse ronde poriën waar de MATLAB-route (Otsu op ruw + watershed) juist
+ridge-segmenten opleverde. Beide detectoren draaien, **beide beelden opgeslagen**
+(`imm_pores_regions.png` + `imm_pores.png`); region is primair (`--imm-detect`, default region).
+**WI-5:** per-porie nearest-neighbour tabel (`*_nn.csv`: Porie_ID, Coordinates, Nearest_neighbour_ID,
+Distance_neighbour µm, Angle_neighbour °) + genummerde kaarten voor OCT/immuno/gematcht.
+Hoek-conventie: atan2(dy,dx), x-rechts/y-omlaag, 0°=rechts, +=met de klok mee — **te bevestigen**
+tegen de voorbeeldtabel in de bron-docx (docx staat niet in de repo).
+Checkpoint: WI-2/3/4/6/7/8 nog te doen (zie `implementation_plan.md`).
+
+## 2026-07-23 — Rapport gestructureerd naar de drie doelstellingen
+De analyse-uitvoer is een net, zelfstandig **`report.html`** (`porepair/report.py`): ingebedde
+figuren + tabellen, printbaar naar PDF. Secties = de projectdoelstellingen: (1) poriëntelling in
+de AOI (volledige OCT-area, zelfde area in immuno), (2) matching (gedeeld / alleen-OCT /
+alleen-immuno), (3) interporie-afstand van de **gematchte** poriën (headline; all-pore als context).
+CLI en GUI openen het rapport na afloop.
+
+## 2026-07-23 — Herbruikbare tool `porepair/`
+De pijplijn is geconsolideerd tot een CLI-tool `porepair` (detect → pick → analyze) zodat
+andere beeldparen dezelfde analyse kunnen ondergaan. De verkennende scripts in `work/`
+blijven als historie staan maar zijn niet canoniek. Zie `wiki/porepair-tool.md`.
+
+## 2026-07-23 — Registratie via handmatige ankerpunten + affiene transform
+**Besluit:** OCT→immuno registratie gebeurt met een **handjevol handmatig aangewezen
+corresponderende punten** (via `point_picker.html`), waarna een **affiene** transform wordt
+gefit. Voor deze dataset: 6 punten, residu 4,8 px gemiddeld (~80–130 µm), schaal 0,58,
+rotatie ~117°, verwaarloosbare shear.
+
+**Waarom / verworpen alternatieven:** vijf volautomatische methodes faalden — poriën-RANSAC,
+oriëntatie-gestuurde zoek, FFT-fasecorrelatie op het oriëntatieveld, core-verankering
+(Poincaré), en ICP. Ze convergeerden telkens naar *plausibele-maar-foute* uitlijningen.
+Oorzaak: (1) poriën liggen in een **quasi-regelmatig rooster** → veel verschuivingen
+"passen" (ambigu); (2) **ridge-oriëntatie varieert traag** → zwak onderscheidend, twee
+verschillende gebieden halen al ~70% oriëntatie-overeenkomst. De onderscheidende kenmerken
+(minutiae, core/delta) zijn cross-modaal lastig automatisch te matchen. Handmatige punten
+zijn de professionele standaard voor multimodale registratie en gaven direct een goede fit.
+
+**Vervorming:** de door de gebruiker verwachte niet-lineaire vervorming bleek **klein**
+(affiene residu ~5 px, nauwelijks shear); affiene volstaat. TPS op dezelfde punten blijft
+optioneel voor lokale aanscherping (maar extrapoleert slecht buiten de punten-hull).
+
+## 2026-07-23 — Poriëndetectie
+White-tophat (schijf ~9–11 px) + lokale-maxima. Drempel bij de **knik** van de curve
+"aantal pieken vs. drempel" (adaptief, generaliseert beter dan een vaste waarde).
+Immuno: **rood-kanaal**, en een **afdruk-mask** = grootste samenhangende component na
+zware blur+drempel, om achtergrondruis/liniaal buiten te sluiten.
+Resultaat deze dataset: OCT 525, immuno 533 poriën.
+
+## 2026-07-23 — Fysieke schaal uit OCT-kalibratie
+OCT-beeld = 10×10 mm over 1044×1154 px → 9,58 µm/px (x), 8,67 µm/px (y), licht anisotroop.
+Immuno-schaal wordt via de registratie-transform afgeleid (niet los geraden). Ridge-periode
+bevestigt: OCT ~64 px, immuno ~34 px → OCT is ~0,58× ingezoomd (immuno ~16,6 µm/px).
+
+## 2026-07-23 — Rapportagekeuzes analyse
+Poriëntelling zowel voor de **volledige OCT-ROI** (zoals gevraagd) als voor het **eerlijke
+gebied** (ROI ∩ immuno-afdruk), omdat een deel van de ROI buiten de gelabelde afdruk valt.
+Matching via **mutual nearest-neighbour**; match-straal-gevoeligheid expliciet gerapporteerd.
+Interporie-afstand als nearest-neighbour, zowel over alle poriën (beste schatting) als over
+de gematchte subset.

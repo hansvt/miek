@@ -1,0 +1,24 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Generated analysis outputs (regenerable, large; also embed the source images as base64)
+out/
+out2/
+out3/
+point_picker.html
+*.xlsx
+*.docx
+
+# Local editor / harness config
+.claude/settings.local.json
+
+# Input biometric data (fingerprint images) — excluded by default.
+# These are personal/biometric data; do not commit to a public repo unless intended.
+# To include them deliberately, remove the line below (and reconsider repo visibility).
+images/
+
+# Archives
+*.zip

@@ -1,0 +1,22 @@
+# Glossary
+
+- **OCT** — Optical Coherence Tomography; en-face beeld van de vingerafdruk. Poriën = witte puntjes op de ridges.
+- **immunolabel(ing)** — fluorescentie-opname; signaal in het **rode kanaal**. Poriën = rode kralen langs de ridges.
+- **ridge** — huidlijn van de vingerafdruk.
+- **porie** — zweetklier-opening op een ridge; het te tellen object.
+- **minutiae** — karakteristieke ridge-details: **ridge ending** (lijneinde) en **bifurcatie** (splitsing). Betrouwbare ankerpunten.
+- **core** — centraal singulier punt van een loop (waar ridges recurveren). Poincaré-index +½.
+- **delta** — singulier punt waar drie ridge-systemen samenkomen. Poincaré-index −½.
+- **Poincaré-index** — som van oriëntatieverschillen langs een lus; detecteert core/delta.
+- **oriëntatieveld** — lokale ridge-richting (structuurtensor). Modaliteit-onafhankelijk, maar traag variërend → zwak onderscheidend voor registratie.
+- **white top-hat** — morfologische operatie die kleine heldere blobs isoleert; basis van de poriëndetectie.
+- **registratie** — twee beelden in hetzelfde coördinatenstelsel leggen.
+- **affiene transform** — lineaire mapping (rotatie, schaal, shear, translatie); 6 parameters.
+- **similarity transform** — affien zonder shear (rotatie + uniforme schaal + translatie); 4 parameters.
+- **TPS** — Thin-Plate Spline; niet-lineaire warp die door alle ankerpunten gaat (extrapoleert slecht buiten de punten-hull).
+- **ICP** — Iterative Closest Point; iteratief puntenwolk-registratie.
+- **mutual nearest-neighbour (matching)** — twee punten matchen alleen als ze elkaars dichtstbijzijnde zijn.
+- **interporie-afstand** — nearest-neighbour afstand tussen poriën (µm); maat voor poriën-dichtheid/-spreiding.
+- **ROI** — region of interest; hier de (geldige) OCT-beeldarea.
+- **eerlijk gebied** — ROI ∩ immuno-afdruk: waar beide modaliteiten signaal hebben.
+- **AOI** (area of interest) — synoniem voor het eerlijke gebied in de tool/rapportage (WI-3).
