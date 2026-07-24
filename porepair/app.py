@@ -229,6 +229,7 @@ class App:
         # ---- state ----
         self.oct_path = self.imm_path = None
         self.oct_bgr = self.imm_bgr = None
+        self.oct_disp = self.imm_disp = None      # enhanced BGR for display in every step
         self.step = 1
 
         self.pairs = []              # landmark pairs [{"o":[x,y], "i":[x,y]}, ...]
@@ -293,8 +294,8 @@ class App:
         self.oct_path = p
         self.oct_bgr = cv2.imread(p)
         self.l1_oct.config(text=os.path.basename(p))
-        vis = cv2.cvtColor(D.enhance(cv2.cvtColor(self.oct_bgr, cv2.COLOR_BGR2GRAY)), cv2.COLOR_GRAY2BGR)
-        self.p1_oct.set_image(vis)
+        self.oct_disp = cv2.cvtColor(D.enhance(cv2.cvtColor(self.oct_bgr, cv2.COLOR_BGR2GRAY)), cv2.COLOR_GRAY2BGR)
+        self.p1_oct.set_image(self.oct_disp)
         self._invalidate_from_images()
         self._check_step1()
 
@@ -306,8 +307,8 @@ class App:
         self.imm_path = p
         self.imm_bgr = cv2.imread(p)
         self.l1_imm.config(text=os.path.basename(p))
-        vis = cv2.cvtColor(D.enhance(self.imm_bgr[:, :, 2]), cv2.COLOR_GRAY2BGR)
-        self.p1_imm.set_image(vis)
+        self.imm_disp = cv2.cvtColor(D.enhance(self.imm_bgr[:, :, 2]), cv2.COLOR_GRAY2BGR)
+        self.p1_imm.set_image(self.imm_disp)
         self._invalidate_from_images()
         self._check_step1()
 
@@ -565,11 +566,16 @@ class App:
     def _enter_step3(self):
         if self.transform is None:
             return
-        if self.det_o is None:
+        if self.det_o is None:                       # detect OCT pores once (this is step 3)
             self.status.config(text="OCT-poriën detecteren…"); self.root.update()
             self.det_o = D.detect(self.oct_bgr, mode="oct")
             self.p3_oct.set_image(self._display(self.det_o))
-        self._detect_imm(reset_view=(self.det_i is None))
+        elif self.p3_oct.img is None:
+            self.p3_oct.set_image(self._display(self.det_o))
+        if self.det_i is None:                       # detect immuno within the AOI
+            self._detect_imm(reset_view=True)
+        elif self.p3_imm.img is None:
+            self.p3_imm.set_image(self._display(self.det_i))
 
     def _detect_imm(self, reset_view=False):
         if self.imm_bgr is None or self.aoi_mask is None:
@@ -682,6 +688,10 @@ class App:
             self.status.config(text="Selecteer de OCT- en immunolabel-beelden.")
         elif n == 2:
             self.f2.pack(fill="both", expand=True)
+            if self.oct_disp is not None:          # populate the pick panels (fixes empty step-2)
+                self.p2_oct.set_image(self.oct_disp)
+            if self.imm_disp is not None:
+                self.p2_imm.set_image(self.imm_disp)
             self._show_step2_pick()
         elif n == 3:
             self.f3.pack(fill="both", expand=True)

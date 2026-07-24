@@ -17,21 +17,23 @@ root.withdraw()
 app = App(root)
 print("step after init:", app.step)
 
-# ---- Step 1: load images (bypass filedialog) ----
-app.oct_path = os.path.join(ROOT, "images", "2lindex_.jpg")
-app.imm_path = os.path.join(ROOT, "images", "L2_index_mag_20sec_500.CR2.JPG")
-app.oct_bgr = cv2.imread(app.oct_path)
-app.imm_bgr = cv2.imread(app.imm_path)
-vis_o = cv2.cvtColor(app.oct_bgr, cv2.COLOR_BGR2GRAY)
-app.p1_oct.set_image(cv2.cvtColor(vis_o, cv2.COLOR_GRAY2BGR))
-app.p1_imm.set_image(app.imm_bgr)
-app._invalidate_from_images()
-app._check_step1()
+# ---- Step 1: load images through the REAL open_oct/open_imm (mock the file dialog) ----
+import tkinter.filedialog as fd
+OCTP = os.path.join(ROOT, "images", "2lindex_.jpg")
+IMMP = os.path.join(ROOT, "images", "L2_index_mag_20sec_500.CR2.JPG")
+fd.askopenfilename = lambda **kw: OCTP
+app.open_oct()
+fd.askopenfilename = lambda **kw: IMMP
+app.open_imm()
 print("step1 next button state:", app.b1_next["state"])
 assert app.b1_next["state"] == "normal"
+assert app.p1_oct.img is not None and app.p1_imm.img is not None
 
 app.goto_step(2)
 print("step after goto(2):", app.step)
+# the step-2 pick panels must actually show the images (regression guard)
+print("p2_oct has image:", app.p2_oct.img is not None, "· p2_imm has image:", app.p2_imm.img is not None)
+assert app.p2_oct.img is not None and app.p2_imm.img is not None, "step-2 pick panels are empty!"
 
 # ---- Step 2: click landmark pairs from work/points.json ----
 pairs = json.load(open(os.path.join(ROOT, "work", "points.json")))["pairs"]
@@ -55,6 +57,14 @@ print("step after goto(3):", app.step)
 print("det_o:", None if app.det_o is None else len(app.det_o["points"]))
 print("det_i (primary):", None if app.det_i is None else len(app.det_i["points"]))
 assert app.det_o is not None and app.det_i is not None and len(app.det_i["points"]) > 0
+print("p3_oct has image:", app.p3_oct.img is not None, "· p3_imm has image:", app.p3_imm.img is not None)
+assert app.p3_oct.img is not None and app.p3_imm.img is not None, "step-3 panels are empty!"
+# navigating back to step 2 and forward must keep everything intact
+app.goto_step(2)
+assert app.p2_oct.img is not None and app.p2_imm.img is not None
+app.goto_step(3)
+assert app.det_i is not None and app.p3_imm.img is not None
+print("round-trip step2<->step3 OK")
 
 # ---- redetect with tuned params ----
 app.imm_circ.set("0.2")
