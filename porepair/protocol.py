@@ -37,20 +37,31 @@ def build(out_dir, results, meta):
             f"this calibration; the immunolabel scale follows from the registration transform.")
 
     doc.add_heading("Immunolabel pore detection", level=2)
-    _p(doc, f"Pore detection used the raw {meta.get('imm_channel','red')} channel. Contrast "
-            f"enhancement (CLAHE) was used only for display and point picking, not for detection, "
-            f"because it makes the ridge lines pop and would create false blobs. Because the "
-            f"immunolabel signal is the excreted material around each pore rather than the pore "
-            f"itself, pores appear as small round blobs on the (brighter, continuous) ridge. A "
-            f"white top-hat (disk radius {meta.get('imm_tophat',11)} px) removed the broad ridge "
-            f"so individual pore beads remained as separated bumps; these were binarised (Otsu), "
-            f"and connected components were kept as pores when their area ≥ {meta.get('imm_min_area',15)} px "
-            f"and circularity (4π·area/perimeter²) ≥ {meta.get('imm_circularity',0.4)}. Each pore's "
-            f"centroid was taken as its position and its equivalent radius recorded. Detection was "
-            f"restricted to the print body (largest connected component after heavy blur and "
-            f"thresholding), excluding the ruler, stray objects and background speckle. A top-hat "
-            f"point-maximum detector was also run for comparison ({meta.get('imm_detect','region')} "
-            f"was used as the primary detector here).")
+    idet = r.get("imm_detection") or {}
+    p = idet.get("params") or {}
+    opt = p.get("optimize", {})
+    rej = idet.get("rejected") or {}
+    rej_txt = ", ".join(f"{k}: {v}" for k, v in rej.items()) if rej else "none"
+    region = ("a user-selected region mask" if idet.get("region_mask") else
+              "the print body (largest connected component after heavy blur/threshold)")
+    _p(doc, f"Because the immunolabel signal is the excreted material around each pore rather than "
+            f"the pore itself, pores appear as small blobs. Detection used the raw "
+            f"{meta.get('imm_channel','red')} channel and was restricted to {region}. The image was "
+            f"first optimised ({opt.get('method','background subtraction + contrast stretch')}; "
+            f"background sigma {opt.get('bg_sigma','~2x pore diameter')}, percentile clip "
+            f"{opt.get('clip_pct','[1, 99.5]')}) to flatten ridge/illumination and balance black/white; "
+            f"CLAHE was used only for display, not detection. This optimisation is a documented "
+            f"provisional step, intended to be replaced by the laboratory's MATLAB white/black-balance "
+            f"procedure. The optimised image was binarised (Otsu) and connected components analysed. "
+            f"Thresholds were scale-aware, derived from the estimated pore diameter "
+            f"({p.get('pore_diam_px','?')} px): components were kept as pores when their area fell in "
+            f"{p.get('min_area','?')}–{p.get('max_area','?')} px², circularity ≥ "
+            f"{p.get('circularity_thresh','?')}, solidity ≥ {p.get('solidity_thresh','?')} and "
+            f"eccentricity ≤ {p.get('max_eccentricity','?')}; fused blobs were handled by "
+            f"'{p.get('merged_blobs','split')}'. Each pore's centroid was its position and its "
+            f"equivalent radius recorded. Rejected artefacts (with reason): {rej_txt}. "
+            f"A top-hat point-maximum detector was also run for comparison "
+            f"({idet.get('detector','region')} was the primary detector).")
 
     doc.add_heading("OCT pore detection", level=2)
     _p(doc, "OCT pores (bright dots) were detected with a white top-hat followed by local-maxima "

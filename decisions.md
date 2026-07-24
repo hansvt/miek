@@ -1,5 +1,18 @@
 # Decisions (newest first)
 
+## 2026-07-24 — Betere immuno-annotatie / artefact-reductie (annotation_improvement_plan.md)
+Immuno-detectie herzien: **optimaliseren → Otsu → regionprops → rijk vormfilter met verwerp-reden**
+i.p.v. tophat-puntmaxima. Kern-inzichten: (1) de referentie "316 poriën" = Otsu op het handmatig
+**BW-geoptimaliseerde** gebied → `optimize_imm()` maakt die stap reproduceerbaar (voorlopig; MATLAB
+wit/zwart-balans vervangt later, modulair opgebouwd); (2) parameters **schaal-relatief** (afgeleid
+uit geschatte poriediameter), niet absoluut; (3) artefacten (speckle/smeer/ridge/onregelmatig)
+apart geklasseerd en gelogd (`imm_rejected.csv/.png`); (4) detectie draait op een **geselecteerde
+regio** (`--imm-region` / GUI-masker). Validatie op de BW-referentie: **333 ≈ 316**. Samengesmolten
+blobs: `--merged-blobs split|reject` (default split, niet-splitsbaar = één grote porie). Handmatige
+**curatie** als vangnet via `imm_curator.html` + `analyze --imm-points`. Doorgetrokken naar
+rapport/protocol/Excel. **316 blijft indicatie, geen tuning-doel** (visuele controle leidend).
+Nog open: interactief regio-**tekenen** (nu vooraf-masker), en de echte MATLAB-optimalisatie.
+
 ## 2026-07-24 — WI-2/3/4/6/7/8 afgerond (rest van implementation_plan.md)
 - **WI-4** matchmarge: straal = `match_frac·NN + k·mediaan(regio-straal)` (k default 0,5); mutual-NN ongemoeid.
 - **WI-2** registratie-verfijning met poriën-correspondenties (ankerpunten ×3 gewogen): **default UIT**.

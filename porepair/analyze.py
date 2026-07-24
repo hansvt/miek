@@ -82,7 +82,7 @@ def _mutual_match(Om, I, radius):
 
 def run(out_dir, points_path, oct_mm=(10.0, 10.0), transform_kind="affine",
         match_frac=0.45, radii_fracs=(0.35, 0.45, 0.55), match_margin_k=0.5,
-        refine_with_pores=False, refine_iters=3, refine_weight=3):
+        refine_with_pores=False, refine_iters=3, refine_weight=3, imm_points_path=None):
     meta = json.load(open(os.path.join(out_dir, "meta.json")))
     oct_bgr = cv2.imread(meta["oct"])
     imm_bgr = cv2.imread(meta["imm"])
@@ -91,7 +91,12 @@ def run(out_dir, points_path, oct_mm=(10.0, 10.0), transform_kind="affine",
     SX, SY = oct_mm[0] * 1000.0 / Woct, oct_mm[1] * 1000.0 / Hoct     # um/px
 
     Opts = np.load(os.path.join(out_dir, "oct_pts.npy")).astype(float)[:, ::-1]   # (x,y)
-    Ipts = np.load(os.path.join(out_dir, "imm_pts.npy")).astype(float)[:, ::-1]
+    if imm_points_path:                       # WI-E: use manually curated immuno pores
+        cur = json.load(open(imm_points_path))["points"]
+        Ipts = np.array(cur, float).reshape(-1, 2)          # already [x,y]
+        imm_eqr = None
+    else:
+        Ipts = np.load(os.path.join(out_dir, "imm_pts.npy")).astype(float)[:, ::-1]
     oct_valid = np.load(os.path.join(out_dir, "oct_valid.npy"))
     imm_print = np.load(os.path.join(out_dir, "imm_valid.npy"))
     # per-immuno-pore region size (WI-4 match margin); only aligned when region is primary
@@ -217,6 +222,8 @@ def run(out_dir, points_path, oct_mm=(10.0, 10.0), transform_kind="affine",
         "images": {"oct": meta["oct"], "imm": meta["imm"]},
         "calibration_um_per_px": {"x": SX, "y": SY, "oct_mm": list(oct_mm)},
         "transform": tinfo,
+        "imm_detection": {"detector": meta.get("imm_detect"), "params": meta.get("imm_params"),
+                          "rejected": meta.get("imm_rejected"), "region_mask": meta.get("imm_region_mask")},
         "roi_mm2": roi_mm2,
         "roi_covered_by_print_pct": round(100 * (overlap > 0).sum() / max((roi > 0).sum(), 1), 1),
         "counts_full_roi": {"oct": int(len(O)), "imm": int(len(I))},

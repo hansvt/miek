@@ -107,6 +107,31 @@ _CSS = """
 """
 
 
+def _imm_detection_section(out_dir, r, img):
+    d = r.get("imm_detection") or {}
+    if not d.get("params"):
+        return ""
+    p = d["params"]
+    rej = d.get("rejected") or {}
+    opt = p.get("optimize", {})
+    figs = ""
+    for fn, cap in [("imm_optimized.png", "Geoptimaliseerde immuno-image (detectie draait hierop)."),
+                    ("imm_rejected.png", "Behouden poriën (groen) vs. verworpen artefacten (rood/oranje).")]:
+        fp = os.path.join(out_dir, fn)
+        if os.path.exists(fp):
+            figs += f'<div>{img(fp, cap)}</div>'
+    rej_txt = ", ".join(f"{k}: {v}" for k, v in rej.items()) if rej else "geen"
+    return f"""<h2>Immuno-annotatie (artefact-reductie)</h2>
+<p>Immuno-poriën gedetecteerd als <b>regio's</b> (centroïde), niet als puntmaxima. Beeld eerst
+geoptimaliseerd ({opt.get('method','?')}, bg-sigma {opt.get('bg_sigma','?')}, clip {opt.get('clip_pct','?')})
+— detectie draait op dat beeld; CLAHE is alleen voor weergave. Geschatte poriediameter
+{p.get('pore_diam_px','?')} px; grootte-band {p.get('min_area','?')}–{p.get('max_area','?')} px²,
+circulariteit ≥ {p.get('circularity_thresh','?')}, solidity ≥ {p.get('solidity_thresh','?')},
+eccentriciteit ≤ {p.get('max_eccentricity','?')}, samengesmolten blobs → <b>{p.get('merged_blobs','?')}</b>.
+Verworpen artefacten: {rej_txt}. Details: <code>imm_rejected.csv</code>.</p>
+<div class="cols">{figs}</div>"""
+
+
 def _wi5_section(out_dir, r, img):
     nm = r.get("numbered_maps") or {}
     matched = nm.get("matched")
@@ -238,6 +263,8 @@ Cijfers voor het eerlijke gebied.</p>
 </div>
 
 {_wi5_section(out_dir, r, img)}
+
+{_imm_detection_section(out_dir, r, img)}
 
 <h2>Methode &amp; kanttekeningen</h2>
 <ul style="font-size:13px">

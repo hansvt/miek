@@ -76,6 +76,7 @@ def build(out_dir, results, meta):
         "OCT_Pores": _read_csv(os.path.join(out_dir, "oct_nn.csv")),
         "Immuno_Pores": _read_csv(os.path.join(out_dir, "imm_nn.csv")),
         "Matched_NN": _read_csv(os.path.join(out_dir, "matched_nn.csv")),
+        "Immuno_Rejected": _read_csv(os.path.join(out_dir, "imm_rejected.csv")),
     }
     path = os.path.join(out_dir, "results.xlsx")
     with pd.ExcelWriter(path, engine="openpyxl") as xl:

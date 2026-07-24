@@ -8,6 +8,7 @@ Needs only the standard library's tkinter plus opencv/numpy/scipy/scikit-image.
 import os
 import json
 import base64
+import csv
 import numpy as np
 import cv2
 import tkinter as tk
@@ -189,14 +190,19 @@ class App:
         self.imm_method = tk.StringVar(value="region")
         ttk.Combobox(dc, textvariable=self.imm_method, values=["region", "tophat"], width=8,
                      state="readonly").pack(side="left", padx=2)
-        self.imm_circ = tk.StringVar(value="0.40")
-        self.imm_minarea = tk.StringVar(value="15")
-        self.imm_tophat = tk.StringVar(value="11")
-        for lbl, var, w in [("circ", self.imm_circ, 5), ("min-area", self.imm_minarea, 5),
-                            ("tophat R", self.imm_tophat, 4)]:
+        self.imm_circ = tk.StringVar(value="0.15")
+        self.imm_minfrac = tk.StringVar(value="0.15")
+        self.imm_maxfrac = tk.StringVar(value="6.0")
+        for lbl, var, w in [("circ", self.imm_circ, 5), ("min-frac", self.imm_minfrac, 5),
+                            ("max-frac", self.imm_maxfrac, 5)]:
             tk.Label(dc, text=lbl, fg="#ccc", bg="#111").pack(side="left", padx=(8, 1))
             tk.Entry(dc, textvariable=var, width=w).pack(side="left")
+        self.merged_var = tk.StringVar(value="split")
+        tk.Label(dc, text="merged", fg="#ccc", bg="#111").pack(side="left", padx=(8, 1))
+        ttk.Combobox(dc, textvariable=self.merged_var, values=["split", "reject"], width=7,
+                     state="readonly").pack(side="left")
         tk.Button(dc, text="↻ her-detecteer immuno", command=self.redetect_imm).pack(side="left", padx=10)
+        tk.Button(dc, text="regio-masker…", command=self.open_region_mask).pack(side="left")
         self.det_info = tk.Label(dc, text="", fg="#9cf", bg="#111")
         self.det_info.pack(side="left")
 
@@ -223,6 +229,7 @@ class App:
         self.det_o = self.det_i = None
         self.det_i_reg = self.det_i_top = None
         self.imm_primary = "region"
+        self.imm_region_mask = None
         self.pairs = []          # list of {"o":[x,y], "i":[x,y]}
         self.pending = None
         self.expect = "o"
@@ -252,9 +259,10 @@ class App:
 
     def _imm_params(self):
         try:
-            return float(self.imm_circ.get()), int(self.imm_minarea.get()), int(self.imm_tophat.get())
+            return (float(self.imm_circ.get()), float(self.imm_minfrac.get()),
+                    float(self.imm_maxfrac.get()))
         except ValueError:
-            messagebox.showerror("porepair", "circ / min-area / tophat R moeten getallen zijn.")
+            messagebox.showerror("porepair", "circ / min-frac / max-frac moeten getallen zijn.")
             return None
 
     def _detect_imm(self, reset_view=False):
@@ -263,11 +271,12 @@ class App:
         pr = self._imm_params()
         if pr is None:
             return
-        circ, ma, thr = pr
+        circ, minf, maxf = pr
         self.status.config(text="immuno detecteren (region + top-hat)…"); self.root.update()
-        self.det_i_top = D.detect(self.imm_bgr, mode="imm", tophat=thr)
-        self.det_i_reg = D.detect_regions_imm(self.imm_bgr, tophat_radius=thr,
-                                              min_area=ma, circularity_thresh=circ)
+        self.det_i_top = D.detect(self.imm_bgr, mode="imm")
+        self.det_i_reg = D.detect_regions_imm(
+            self.imm_bgr, region_mask=self.imm_region_mask, circularity_thresh=circ,
+            min_area_frac=minf, max_area_frac=maxf, merged_blobs=self.merged_var.get())
         self.imm_primary = self.imm_method.get()
         self.det_i = self.det_i_reg if self.imm_primary == "region" else self.det_i_top
         disp = self._display(self.det_i)
@@ -277,6 +286,22 @@ class App:
         self._status()
 
     def redetect_imm(self):
+        self._detect_imm(reset_view=False)
+
+    def open_region_mask(self):
+        """WI-G: load a region mask (nonzero = detect here), e.g. geselecteerd_gebied_bw.jpg."""
+        if self.imm_bgr is None:
+            messagebox.showwarning("porepair", "Open eerst het immunolabel-beeld."); return
+        p = filedialog.askopenfilename(title="Kies regio-masker (nonzero = detecteren)",
+                                       filetypes=[("Beelden", "*.png *.jpg *.jpeg *.tif *.bmp"), ("Alle", "*.*")])
+        if not p:
+            return
+        rm = cv2.imread(p, cv2.IMREAD_GRAYSCALE)
+        if rm is None:
+            messagebox.showerror("porepair", "Kon masker niet lezen."); return
+        if rm.shape != self.imm_bgr.shape[:2]:
+            rm = cv2.resize(rm, (self.imm_bgr.shape[1], self.imm_bgr.shape[0]), interpolation=cv2.INTER_NEAREST)
+        self.imm_region_mask = (rm > 0).astype(np.uint8)
         self._detect_imm(reset_view=False)
 
     def _display(self, det):
@@ -362,11 +387,22 @@ class App:
         np.save(os.path.join(out, "imm_valid.npy"), primary["valid"])
         cv2.imwrite(os.path.join(out, "oct_pores.png"), D.draw(self.det_o["gray"], self.det_o["points"]))
         cv2.imwrite(os.path.join(out, "imm_pores.png"), D.draw(top["gray"], top["points"], (0, 255, 0)))
-        cv2.imwrite(os.path.join(out, "imm_pores_regions.png"), D.draw_regions(reg["gray"], reg))
+        cv2.imwrite(os.path.join(out, "imm_pores_regions.png"), D.draw_regions(reg["gray"], reg, on_optimized=True))
+        cv2.imwrite(os.path.join(out, "imm_optimized.png"), reg["optimized"])
+        cv2.imwrite(os.path.join(out, "imm_rejected.png"), D.draw_rejections(reg))
+        if self.imm_region_mask is not None:
+            cv2.imwrite(os.path.join(out, "imm_region_mask.png"), self.imm_region_mask * 255)
+        with open(os.path.join(out, "imm_rejected.csv"), "w", newline="") as fh:
+            w = csv.writer(fh); w.writerow(["x_px", "y_px", "area_px", "reason"])
+            for r in reg["rejections"]:
+                w.writerow([f"{r['x']:.1f}", f"{r['y']:.1f}", f"{r['area']:.0f}", r["reason"]])
+        reasons = {}
+        for r in reg["rejections"]:
+            reasons[r["reason"]] = reasons.get(r["reason"], 0) + 1
         json.dump({"oct": os.path.abspath(self.oct_path), "imm": os.path.abspath(self.imm_path),
-                   "imm_detect": self.imm_primary, "imm_circularity": float(self.imm_circ.get()),
-                   "imm_min_area": int(self.imm_minarea.get()), "imm_tophat": int(self.imm_tophat.get()),
-                   "imm_region_n": len(reg["points"]), "imm_tophat_n": len(top["points"])},
+                   "imm_detect": self.imm_primary, "imm_region_n": len(reg["points"]),
+                   "imm_tophat_n": len(top["points"]), "imm_rejected": reasons,
+                   "imm_region_mask": self.imm_region_mask is not None, "imm_params": reg["params"]},
                   open(os.path.join(out, "meta.json"), "w"), indent=2)
         pts_path = os.path.join(out, "points.json")
         json.dump({"oct_image": os.path.basename(self.oct_path),
@@ -376,6 +412,11 @@ class App:
             k = float(self.margin_k.get())
         except ValueError:
             k = 0.5
+        try:
+            from . import imm_curator
+            imm_curator.build(out, os.path.basename(self.imm_path))
+        except Exception:
+            pass
         try:
             res = A.run(out, pts_path, oct_mm=oct_mm, transform_kind=self.tf_var.get(),
                         match_margin_k=k, refine_with_pores=self.refine_var.get())
