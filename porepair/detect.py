@@ -82,7 +82,12 @@ def detect(image_bgr, mode="oct", channel="red", tophat=9, min_dist=14, thr=None
         thr = adaptive_threshold(th, valid, min_dist)
     pts = peak_local_max(th.astype(float) * (valid > 0), min_distance=min_dist,
                          threshold_abs=float(thr))                # (y,x)
-    return dict(points=pts, valid=valid, gray=gray, tophat=th, thr=float(thr))
+    # per-pore blob area from the thresholded top-hat (for position+area matching, OCT_FM)
+    lab_a = label((th > thr) & (valid > 0))
+    counts = np.bincount(lab_a.ravel())
+    areas = np.array([counts[lab_a[int(y), int(x)]] if lab_a[int(y), int(x)] > 0 else 0.0
+                      for (y, x) in pts], float)
+    return dict(points=pts, valid=valid, gray=gray, tophat=th, thr=float(thr), area=areas)
 
 
 def draw(gray, pts, color=(0, 0, 255), r=6):

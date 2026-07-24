@@ -72,6 +72,26 @@ def _save_numbered_map(base_gray, coords_px, rows, out_path, color=(0, 0, 255)):
     cv2.imwrite(out_path, vis)
 
 
+def _matlab_match(Om, I, oct_area_um, imm_area_um, thr=0.1):
+    """MATLAB-style matching (OCT_FM.txt): combine normalised position + area into one
+    feature vector, then bidirectional nearest-neighbour with a single distance threshold.
+    Positions are normalised by the max [x,y] over both sets; areas (in µm², comparable)
+    by the max area over both. Falls back to position-only if areas are missing."""
+    maxXY = np.maximum(Om.max(0), I.max(0))
+    maxXY[maxXY == 0] = 1.0
+    f1, f2 = Om / maxXY, I / maxXY
+    if oct_area_um is not None and imm_area_um is not None and len(oct_area_um) == len(Om):
+        mA = max(float(np.max(oct_area_um)), float(np.max(imm_area_um)), 1e-9)
+        f1 = np.column_stack([f1, oct_area_um / mA])
+        f2 = np.column_stack([f2, imm_area_um / mA])
+    tI, tO = cKDTree(f2), cKDTree(f1)
+    d1, j1 = tI.query(f1)
+    _, j2 = tO.query(f2)
+    shared = [(i, int(j1[i]), float(d1[i])) for i in range(len(f1))
+              if d1[i] <= thr and j2[j1[i]] == i]
+    return shared, {s[0] for s in shared}, {s[1] for s in shared}
+
+
 def _mutual_match(Om, I, radius):
     tO, tI = cKDTree(Om), cKDTree(I)
     dO, jO = tI.query(Om)
@@ -82,7 +102,8 @@ def _mutual_match(Om, I, radius):
 
 def run(out_dir, points_path, oct_mm=(10.0, 10.0), transform_kind="affine",
         match_frac=0.45, radii_fracs=(0.35, 0.45, 0.55), match_margin_k=0.5,
-        refine_with_pores=False, refine_iters=3, refine_weight=3, imm_points_path=None):
+        refine_with_pores=False, refine_iters=3, refine_weight=3, imm_points_path=None,
+        match_method="mutual-nn", match_thresh=0.1):
     meta = json.load(open(os.path.join(out_dir, "meta.json")))
     oct_bgr = cv2.imread(meta["oct"])
     imm_bgr = cv2.imread(meta["imm"])
@@ -180,11 +201,25 @@ def run(out_dir, points_path, oct_mm=(10.0, 10.0), transform_kind="affine",
     margin = match_margin_k * med_eqr
     radius = base_radius + margin
 
+    # areas in µm² (for MATLAB position+area matching, OCT_FM); OCT via calibration,
+    # immuno via the transform scale so both are comparable
+    scale2 = max(abs(np.linalg.det(T.A)), 1e-9)
+    oct_area_path = os.path.join(out_dir, "oct_area.npy")
+    oct_area_all = np.load(oct_area_path) if os.path.exists(oct_area_path) else None
+    oct_area_um = (oct_area_all[oi] * SX * SY) if oct_area_all is not None and len(oct_area_all) == len(Opts) else None
+    imm_area_um = (np.pi * (imm_eqr[ii] ** 2) * SX * SY / scale2) if imm_eqr is not None and ii.any() else None
+
     sens = {}
-    for fr in radii_fracs:
-        sh, mO, mI = _mutual_match(Om, I, fr * nn_imm)
-        sens[fr] = (len(sh), len(O) - len(mO), len(I) - len(mI))
-    shared, mO, mI = _mutual_match(Om, I, radius)
+    if match_method == "matlab":
+        for th in (0.05, 0.1, 0.15):
+            sh, mO, mI = _matlab_match(Om, I, oct_area_um, imm_area_um, th)
+            sens[th] = (len(sh), len(O) - len(mO), len(I) - len(mI))
+        shared, mO, mI = _matlab_match(Om, I, oct_area_um, imm_area_um, match_thresh)
+    else:
+        for fr in radii_fracs:
+            sh, mO, mI = _mutual_match(Om, I, fr * nn_imm)
+            sens[fr] = (len(sh), len(O) - len(mO), len(I) - len(mI))
+        shared, mO, mI = _mutual_match(Om, I, radius)
 
     def in_ovl(xy):
         return overlap[np.clip(xy[:, 1].astype(int), 0, Hh - 1),
@@ -238,8 +273,10 @@ def run(out_dir, points_path, oct_mm=(10.0, 10.0), transform_kind="affine",
         "matching_fair_region": {"shared": len(sh_ovl),
                                  "oct_only": int(O_ovl.sum() - len(mO_o)),
                                  "imm_only": int(I_ovl.sum() - len(mI_o))},
-        "match_radius_sensitivity": {f"{k:.2f}xNN": {"shared": v[0], "oct_only": v[1], "imm_only": v[2]}
-                                     for k, v in sens.items()},
+        "match_method": match_method,
+        "match_radius_sensitivity": {
+            (f"thr={k:.2f}" if match_method == "matlab" else f"{k:.2f}xNN"):
+            {"shared": v[0], "oct_only": v[1], "imm_only": v[2]} for k, v in sens.items()},
         "interpore_distance_um": {k: st(v) for k, v in ipd.items()},
         "matched_pair_agreement_um": st(pair_um),
         "density_per_mm2": {"oct": round(len(O) / roi_mm2, 2), "imm": round(len(I) / roi_mm2, 2)},

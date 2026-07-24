@@ -10,11 +10,12 @@
 >   (split houdt niet-splitsbare grote blob als één porie).
 > - **D** `work/validate_imm_detection.py`: BW-referentie → **333 poriën** (ref ~316), alleen
 >   speckle/ridge verworpen; overlays kept/rejected.
-> - **G** regio-selectie: **interactief rechthoek tekenen** in de app (knop "▭ regio tekenen",
->   sleep op het immuno-paneel) én een vooraf-masker (CLI `--imm-region`, GUI "regio-masker…").
->   Detectie draait binnen de regio. *Polygoon-selectie nog niet; rechthoek + masker wel.*
-> - Ook toegevoegd: MATLAB-getrouwe binarisatie-optie `--imm-bin fixed --imm-bin-thresh --imm-close`
->   (default blijft otsu, robuuster). De MATLAB-matching (OCT_FM.txt, positie+area) staat nog open.
+> - **G** regio-selectie in de app: **rechthoek** én **polygoon** tekenen (knoppen ▭/⬠, ✓ sluit,
+>   ✕ wissen) plus vooraf-masker (CLI `--imm-region`, GUI "masker…"). Detectie draait binnen de regio.
+> - MATLAB-getrouwe binarisatie-optie `--imm-bin fixed --imm-bin-thresh --imm-close` (default otsu).
+> - **MATLAB-matching** (OCT_FM.txt) toegevoegd als optie: genormaliseerde **positie+oppervlakte**,
+>   bidirectioneel, drempel (default 0,1) — `--match-method matlab` / GUI-dropdown. Vereist OCT-porie-
+>   oppervlakte (nu meegemeten). Default blijft mutual-NN + halo-marge.
 > - **E** `imm_curator.html` (klik-toevoegen/verwijderen, pan/zoom/rotate, export) +
 >   `analyze --imm-points curated.json`. CLI `curate`; GUI bouwt hem mee.
 > - **F** doorgetrokken naar `report.html` (sectie "Immuno-annotatie"), `protocol.docx`,

@@ -121,12 +121,12 @@ class Panel:
     def _on_slider(self, _):
         self._apply_pivot(self.z, float(self.rot_var.get()), (CW / 2, CH / 2))
 
-    def _drawing_region(self):
-        return self.side == "i" and getattr(self.app, "region_draw", False)
+    def _region(self):
+        return self.app.region_mode if self.side == "i" else None
 
     # ---- mouse ----
     def _press(self, ev):
-        if self._drawing_region():                     # start rectangle ROI
+        if self._region() == "rect":                    # start rectangle ROI
             ix, iy = self.canvas_to_img(ev.x, ev.y)
             self.app._rect = [ix, iy, ix, iy]
             self._down = None
@@ -136,7 +136,7 @@ class Panel:
         self._moved = False
 
     def _motion(self, ev):
-        if self._drawing_region() and self.app._rect is not None:
+        if self._region() == "rect" and self.app._rect is not None:
             ix, iy = self.canvas_to_img(ev.x, ev.y)
             self.app._rect[2], self.app._rect[3] = ix, iy
             self.render()
@@ -152,16 +152,22 @@ class Panel:
         self.render()
 
     def _release(self, ev):
-        if self._drawing_region() and self.app._rect is not None:
+        if self._region() == "rect" and self.app._rect is not None:
             self.app.finish_region_rect()
             return
         was_click = self._down is not None and not self._moved
         self._down = None
-        if was_click and self.img is not None:
-            ix, iy = self.canvas_to_img(ev.x, ev.y)
-            h, w = self.img.shape[:2]
-            if 0 <= ix <= w and 0 <= iy <= h:
-                self.app.on_click(self.side, ix, iy)
+        if not (was_click and self.img is not None):
+            return
+        ix, iy = self.canvas_to_img(ev.x, ev.y)
+        h, w = self.img.shape[:2]
+        if not (0 <= ix <= w and 0 <= iy <= h):
+            return
+        if self._region() == "poly":                    # add polygon vertex
+            self.app._poly.append([ix, iy])
+            self.render()
+        elif self._region() is None:
+            self.app.on_click(self.side, ix, iy)
 
     # ---- draw ----
     def render(self):
@@ -200,6 +206,10 @@ class App:
         tk.Checkbutton(top, text="poriën-verfijning", variable=self.refine_var, fg="#ccc",
                        bg="#111", selectcolor="#333", activebackground="#111",
                        activeforeground="#fff").pack(side="left", padx=8)
+        tk.Label(top, text="match:", fg="#ccc", bg="#111").pack(side="left", padx=(6, 2))
+        self.match_method = tk.StringVar(value="mutual-nn")
+        ttk.Combobox(top, textvariable=self.match_method, values=["mutual-nn", "matlab"],
+                     width=10, state="readonly").pack(side="left")
         tk.Button(top, text="3. Analyse + opslaan", command=self.run_analysis,
                   bg="#0a3d62", fg="white").pack(side="left", padx=12)
 
@@ -221,10 +231,13 @@ class App:
         ttk.Combobox(dc, textvariable=self.merged_var, values=["split", "reject"], width=7,
                      state="readonly").pack(side="left")
         tk.Button(dc, text="↻ her-detecteer immuno", command=self.redetect_imm).pack(side="left", padx=10)
-        self.bDraw = tk.Button(dc, text="▭ regio tekenen", command=self.toggle_region_draw)
-        self.bDraw.pack(side="left")
-        tk.Button(dc, text="✕ regio wissen", command=self.clear_region).pack(side="left")
-        tk.Button(dc, text="regio-masker…", command=self.open_region_mask).pack(side="left")
+        self.bRect = tk.Button(dc, text="▭ rechthoek", command=lambda: self.toggle_region("rect"))
+        self.bRect.pack(side="left")
+        self.bPoly = tk.Button(dc, text="⬠ polygoon", command=lambda: self.toggle_region("poly"))
+        self.bPoly.pack(side="left")
+        tk.Button(dc, text="✓ sluit", command=self.finish_poly).pack(side="left")
+        tk.Button(dc, text="✕ wissen", command=self.clear_region).pack(side="left")
+        tk.Button(dc, text="masker…", command=self.open_region_mask).pack(side="left")
         self.det_info = tk.Label(dc, text="", fg="#9cf", bg="#111")
         self.det_info.pack(side="left")
 
@@ -252,8 +265,9 @@ class App:
         self.det_i_reg = self.det_i_top = None
         self.imm_primary = "region"
         self.imm_region_mask = None
-        self.region_draw = False          # rectangle-ROI drawing mode on the immuno panel
-        self._rect = None                 # (x0,y0,x1,y1) in immuno image px while drawing
+        self.region_mode = None           # None | 'rect' | 'poly' (immuno-panel ROI drawing)
+        self._rect = None                 # [x0,y0,x1,y1] in immuno image px while drawing
+        self._poly = []                   # list of [x,y] vertices while drawing a polygon
         self.pairs = []          # list of {"o":[x,y], "i":[x,y]}
         self.pending = None
         self.expect = "o"
@@ -312,31 +326,47 @@ class App:
     def redetect_imm(self):
         self._detect_imm(reset_view=False)
 
-    def toggle_region_draw(self):
+    def toggle_region(self, mode):
         if self.imm_bgr is None:
             messagebox.showwarning("porepair", "Open eerst het immunolabel-beeld."); return
-        self.region_draw = not self.region_draw
-        self.bDraw.config(relief="sunken" if self.region_draw else "raised")
-        self.status.config(text="Regio tekenen: sleep een rechthoek op het immuno-beeld."
-                           if self.region_draw else "")
+        self.region_mode = None if self.region_mode == mode else mode
+        self._rect = None
+        if self.region_mode == "poly":
+            self._poly = []
+        self.bRect.config(relief="sunken" if self.region_mode == "rect" else "raised")
+        self.bPoly.config(relief="sunken" if self.region_mode == "poly" else "raised")
+        self.status.config(text={"rect": "Sleep een rechthoek op het immuno-beeld.",
+                                 "poly": "Klik polygoon-hoekpunten; daarna ✓ sluit.",
+                                 None: ""}[self.region_mode])
+        self.pI.render()
 
     def draw_region(self, panel):
-        """draw the rectangle being drawn and/or the active region mask outline."""
-        rect = self._rect
-        if rect is not None:
-            (x0, y0), (x1, y1) = panel.img_to_canvas(rect[:2]), panel.img_to_canvas(rect[2:])
+        """draw the rectangle/polygon being drawn and/or the active region mask outline."""
+        if self._rect is not None:
+            (x0, y0), (x1, y1) = panel.img_to_canvas(self._rect[:2]), panel.img_to_canvas(self._rect[2:])
             panel.canvas.create_rectangle(x0, y0, x1, y1, outline="#0ff", width=2)
+        elif self.region_mode == "poly" and self._poly:
+            cpts = [panel.img_to_canvas(p) for p in self._poly]
+            for (px, py) in cpts:
+                panel.canvas.create_oval(px - 3, py - 3, px + 3, py + 3, outline="#0ff", width=2)
+            if len(cpts) > 1:
+                flat = [c for xy in cpts for c in xy]
+                panel.canvas.create_line(*flat, fill="#0ff", width=2)
         elif self.imm_region_mask is not None:
-            ys, xs = np.where(self.imm_region_mask > 0)
-            if len(xs):
-                a = panel.img_to_canvas([xs.min(), ys.min()]); b = panel.img_to_canvas([xs.max(), ys.max()])
-                panel.canvas.create_rectangle(a[0], a[1], b[0], b[1], outline="#f80", width=1, dash=(4, 3))
+            cnts, _ = cv2.findContours(self.imm_region_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            for c in cnts:
+                pcs = [panel.img_to_canvas([int(p[0][0]), int(p[0][1])]) for p in c[::max(1, len(c)//60)]]
+                if len(pcs) > 1:
+                    panel.canvas.create_line(*[v for xy in pcs for v in xy], fill="#f80", width=1, dash=(4, 3))
+
+    def _set_region_mask(self, mask):
+        self.region_mode = None
+        self.bRect.config(relief="raised"); self.bPoly.config(relief="raised")
+        self.imm_region_mask = mask
+        self._detect_imm(reset_view=False)
 
     def finish_region_rect(self):
-        r = self._rect
-        self._rect = None
-        self.region_draw = False
-        self.bDraw.config(relief="raised")
+        r, self._rect = self._rect, None
         if r is None:
             return
         h, w = self.imm_bgr.shape[:2]
@@ -344,14 +374,24 @@ class App:
         y0, y1 = sorted((int(np.clip(r[1], 0, h)), int(np.clip(r[3], 0, h))))
         if x1 - x0 < 5 or y1 - y0 < 5:
             self.pI.render(); return
+        mask = np.zeros((h, w), np.uint8); mask[y0:y1, x0:x1] = 1
+        self._set_region_mask(mask)
+
+    def finish_poly(self):
+        if len(self._poly) < 3:
+            messagebox.showwarning("porepair", "Klik minstens 3 polygoon-hoekpunten."); return
+        h, w = self.imm_bgr.shape[:2]
         mask = np.zeros((h, w), np.uint8)
-        mask[y0:y1, x0:x1] = 1
-        self.imm_region_mask = mask
-        self._detect_imm(reset_view=False)
+        cv2.fillPoly(mask, [np.array(self._poly, np.int32)], 1)
+        self._poly = []
+        self._set_region_mask(mask)
 
     def clear_region(self):
         self.imm_region_mask = None
         self._rect = None
+        self._poly = []
+        self.region_mode = None
+        self.bRect.config(relief="raised"); self.bPoly.config(relief="raised")
         if self.imm_bgr is not None:
             self._detect_imm(reset_view=False)
 
@@ -446,6 +486,7 @@ class App:
         reg, top = self.det_i_reg, self.det_i_top
         primary = reg if self.imm_primary == "region" else top
         np.save(os.path.join(out, "oct_pts.npy"), self.det_o["points"])
+        np.save(os.path.join(out, "oct_area.npy"), self.det_o.get("area", np.zeros(len(self.det_o["points"]))))
         np.save(os.path.join(out, "imm_pts.npy"), primary["points"])
         np.save(os.path.join(out, "imm_pts_region.npy"), reg["points"])
         np.save(os.path.join(out, "imm_pts_tophat.npy"), top["points"])
@@ -486,7 +527,8 @@ class App:
             pass
         try:
             res = A.run(out, pts_path, oct_mm=oct_mm, transform_kind=self.tf_var.get(),
-                        match_margin_k=k, refine_with_pores=self.refine_var.get())
+                        match_margin_k=k, refine_with_pores=self.refine_var.get(),
+                        match_method=self.match_method.get())
         except Exception as e:
             messagebox.showerror("porepair", f"Analyse mislukt:\n{e}"); raise
         t = res["transform"]; fm = res["matching_fair_region"]; mo = res["interpore_distance_um"]["matched_oct"]

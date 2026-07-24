@@ -20,6 +20,21 @@ def _b64(path):
         return base64.b64encode(f.read()).decode()
 
 
+def _b64_scaled(path, maxdim=1200, quality=82):
+    """Downscale (long side <= maxdim) + JPEG-encode before embedding, to keep report.html
+    small. Falls back to raw bytes if the image can't be read."""
+    import cv2 as _cv2
+    im = _cv2.imread(path)
+    if im is None:
+        return "data:image/png;base64," + _b64(path)
+    h, w = im.shape[:2]
+    s = maxdim / max(h, w)
+    if s < 1.0:
+        im = _cv2.resize(im, (int(w * s), int(h * s)), interpolation=_cv2.INTER_AREA)
+    ok, buf = _cv2.imencode(".jpg", im, [_cv2.IMWRITE_JPEG_QUALITY, quality])
+    return "data:image/jpeg;base64," + base64.b64encode(buf.tobytes()).decode()
+
+
 def _fig(path, w=6, h=3.4):
     fig = plt.figure(figsize=(w, h), dpi=130)
     return fig, path
@@ -107,6 +122,18 @@ _CSS = """
 """
 
 
+def _match_method_text(r):
+    if r.get("match_method") == "matlab":
+        return ("Poriën worden gematcht met de <b>MATLAB-methode</b> (OCT_FM): genormaliseerde "
+                "<b>positie + oppervlakte</b> gecombineerd, bidirectionele nearest-neighbour met "
+                "gecombineerde-afstand drempel.")
+    d = r["match_radius_detail"]
+    return (f"Poriën worden gematcht met <b>mutual nearest-neighbour</b> (straal "
+            f"<b>{r['match_radius_px']} px</b> = {d['base_frac_x_NN']} basis [{d['match_frac']}×NN] "
+            f"+ {d['margin_k_x_region']} marge [{d['margin_k']}× regio-straal "
+            f"{d['median_region_radius_px']} px], voor immuno's halo-signaal).")
+
+
 def _imm_detection_section(out_dir, r, img):
     d = r.get("imm_detection") or {}
     if not d.get("params"):
@@ -171,7 +198,7 @@ def build(out_dir, r, date_str=""):
     sens = r["match_radius_sensitivity"]
 
     def img(path, cap):
-        return f'<div class="fig"><img src="data:image/png;base64,{_b64(path)}"><div class="cap">{cap}</div></div>'
+        return f'<div class="fig"><img src="{_b64_scaled(path)}"><div class="cap">{cap}</div></div>'
 
     sens_rows = "".join(
         f"<tr><td>{k}</td><td>{v['shared']}</td><td>{v['oct_only']}</td><td>{v['imm_only']}</td></tr>"
@@ -226,10 +253,7 @@ AOI valt binnen de gelabelde afdruk (het "eerlijke gebied", waar beide modalitei
 {('<div class="cols"><div>' + img(os.path.join(out_dir,'overlay.png'), 'Volledige ROI (OCT-area).') + '</div><div>' + img(os.path.join(out_dir,'overlay_aoi.png'), 'Alleen de AOI (ROI ∩ immuno-afdruk); buiten de AOI gedimd.') + '</div></div>') if os.path.exists(os.path.join(out_dir,'overlay_aoi.png')) else ''}
 
 <h2>2 · Matching van poriën</h2>
-<p>Poriën worden gematcht met <b>mutual nearest-neighbour</b> (straal <b>{r['match_radius_px']} px</b>
-= {r['match_radius_detail']['base_frac_x_NN']} basis [{r['match_radius_detail']['match_frac']}×NN]
-+ {r['match_radius_detail']['margin_k_x_region']} marge [{r['match_radius_detail']['margin_k']}×
-regio-straal {r['match_radius_detail']['median_region_radius_px']} px], voor immuno's halo-signaal).
+<p>{_match_method_text(r)}
 Klassen: <b>gedeeld</b> (zelfde positie in beide), <b>alleen OCT</b>, <b>alleen immunolabel</b>.
 Cijfers voor het eerlijke gebied.</p>
 <div class="cols">
@@ -237,10 +261,10 @@ Cijfers voor het eerlijke gebied.</p>
  <div>
   {img(f_match, 'Verdeling gedeeld / alleen-OCT / alleen-immuno.')}
   <table>
-   <tr><th class="l">Match-straal</th><th>gedeeld</th><th>alleen OCT</th><th>alleen immuno</th></tr>
+   <tr><th class="l">{'Drempel' if r.get('match_method')=='matlab' else 'Match-straal'}</th><th>gedeeld</th><th>alleen OCT</th><th>alleen immuno</th></tr>
    {sens_rows}
   </table>
-  <div class="cap">Gevoeligheid voor de match-straal (× mediane poriën-afstand).</div>
+  <div class="cap">Gevoeligheid ({'gecombineerde-afstand drempel' if r.get('match_method')=='matlab' else '× mediane poriën-afstand'}).</div>
   <p style="font-size:13px">Positie-overeenkomst van gematchte paren: <b>{_stat(r['matched_pair_agreement_um'])}</b>.</p>
  </div>
 </div>

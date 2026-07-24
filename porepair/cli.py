@@ -62,6 +62,7 @@ def cmd_detect(args):
           f"· IMM top-hat: {len(i_top['points'])} · primary = {args.imm_detect}")
 
     np.save(os.path.join(args.out, "oct_pts.npy"), o["points"])
+    np.save(os.path.join(args.out, "oct_area.npy"), o.get("area", np.zeros(len(o["points"]))))
     np.save(os.path.join(args.out, "imm_pts.npy"), primary["points"])
     np.save(os.path.join(args.out, "imm_pts_region.npy"), i_reg["points"])
     np.save(os.path.join(args.out, "imm_pts_tophat.npy"), i_top["points"])
@@ -109,7 +110,8 @@ def cmd_analyze(args):
     res = A.run(args.out, args.points, oct_mm=_parse_mm(args.oct_mm),
                 transform_kind=args.transform, match_frac=args.match_frac,
                 match_margin_k=args.match_margin_k, refine_with_pores=args.refine_pores,
-                imm_points_path=args.imm_points)
+                imm_points_path=args.imm_points, match_method=args.match_method,
+                match_thresh=args.match_thresh)
     t = res["transform"]
     print(f"transform {t['kind']}: residual {t['residual_mean_px']:.1f}px mean "
           f"(max {t['residual_max_px']:.1f}), scale {t['scale']:.3f}, rot {t['rotation_deg']:.1f}")
@@ -169,6 +171,10 @@ def main(argv=None):
                    help="refine the transform using matched pore correspondences (WI-2)")
     a.add_argument("--imm-points", default=None,
                    help="WI-E: curated immuno points JSON (from imm_curator.html) to use instead of auto-detection")
+    a.add_argument("--match-method", default="mutual-nn", choices=["mutual-nn", "matlab"],
+                   help="mutual-nn (position + halo margin) or matlab (normalised position+area, OCT_FM)")
+    a.add_argument("--match-thresh", type=float, default=0.1,
+                   help="matlab matching: combined normalised-distance threshold (OCT_FM default 0.1)")
     a.set_defaults(func=cmd_analyze)
 
     g = sub.add_parser("gui", help="launch the desktop app (select images, pick points, save)")
