@@ -1,7 +1,8 @@
 # Plan — betere poriën-annotatie in de immunolabeling image (artefact-reductie)
 
 > **STATUS: geïmplementeerd (2026-07-24).**
-> - **A** `optimize_imm()` (bg-subtract + percentiel-stretch; modulair/vervangbaar, params gelogd).
+> - **A** `optimize_imm()` = **MATLAB wit/zwart-balans** (imadjust/stretchlim percentiel-stretch
+>   [0.01,0.99] binnen de regio; uit `OCT_FM2.txt`). Optioneel bg-subtract/CLAHE. Params gelogd.
 > - **B** `estimate_pore_diameter()` → schaal-relatieve size-band / min-dist.
 > - **C** `detect_regions_imm()` herschreven: Otsu op geoptimaliseerd beeld → regionprops →
 >   size-band + eccentriciteit + solidity + circulariteit, met **verwerp-reden per blob**
@@ -9,9 +10,11 @@
 >   (split houdt niet-splitsbare grote blob als één porie).
 > - **D** `work/validate_imm_detection.py`: BW-referentie → **333 poriën** (ref ~316), alleen
 >   speckle/ridge verworpen; overlays kept/rejected.
-> - **G** regio-masker geaccepteerd (CLI `--imm-region`, GUI-knop "regio-masker…"); detectie
->   binnen masker. *Interactief tekenen van een rechthoek/polygoon is nog niet gedaan — een
->   vooraf gemaakt masker (bv. `geselecteerd_gebied_bw.jpg`) werkt wel.*
+> - **G** regio-selectie: **interactief rechthoek tekenen** in de app (knop "▭ regio tekenen",
+>   sleep op het immuno-paneel) én een vooraf-masker (CLI `--imm-region`, GUI "regio-masker…").
+>   Detectie draait binnen de regio. *Polygoon-selectie nog niet; rechthoek + masker wel.*
+> - Ook toegevoegd: MATLAB-getrouwe binarisatie-optie `--imm-bin fixed --imm-bin-thresh --imm-close`
+>   (default blijft otsu, robuuster). De MATLAB-matching (OCT_FM.txt, positie+area) staat nog open.
 > - **E** `imm_curator.html` (klik-toevoegen/verwijderen, pan/zoom/rotate, export) +
 >   `analyze --imm-points curated.json`. CLI `curate`; GUI bouwt hem mee.
 > - **F** doorgetrokken naar `report.html` (sectie "Immuno-annotatie"), `protocol.docx`,

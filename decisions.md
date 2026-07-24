@@ -13,6 +13,15 @@ blobs: `--merged-blobs split|reject` (default split, niet-splitsbaar = één gro
 rapport/protocol/Excel. **316 blijft indicatie, geen tuning-doel** (visuele controle leidend).
 Nog open: interactief regio-**tekenen** (nu vooraf-masker), en de echte MATLAB-optimalisatie.
 
+## 2026-07-24 — MATLAB wit/zwart-balans + interactief regio tekenen (uit OCT_FM2.txt / OCT_FM.txt)
+`optimize_imm()` is nu de **echte MATLAB wit/zwart-balans** (`imadjust`/`stretchlim`, percentiel-stretch
+[0.01,0.99] binnen de geselecteerde regio; uit `OCT_FM2.txt`), i.p.v. de voorlopige bg-subtract.
+Validatie BW-referentie: **321 ≈ 316**. Binarisatie default **otsu** (robuust); MATLAB-getrouwe
+`fixed`-drempel + `imclose` als optie (`--imm-bin fixed`), maar absoluut-drempel transfereert slecht.
+**WI-G**: naast vooraf-masker nu ook **interactief rechthoek tekenen** in de app ("▭ regio tekenen").
+Nog open: MATLAB-matching (OCT_FM.txt: positie+oppervlakte gecombineerd, genormaliseerd, drempel 0.1)
+als alternatief voor de huidige mutual-NN; en polygoon-regio.
+
 ## 2026-07-24 — WI-2/3/4/6/7/8 afgerond (rest van implementation_plan.md)
 - **WI-4** matchmarge: straal = `match_frac·NN + k·mediaan(regio-straal)` (k default 0,5); mutual-NN ongemoeid.
 - **WI-2** registratie-verfijning met poriën-correspondenties (ankerpunten ×3 gewogen): **default UIT**.

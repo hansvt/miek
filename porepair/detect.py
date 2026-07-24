@@ -92,30 +92,27 @@ def draw(gray, pts, color=(0, 0, 255), r=6):
     return vis
 
 
-def optimize_imm(image_bgr, channel="red", bg_sigma=None, pore_diam=None,
-                 clip=(1.0, 99.5), clahe=False):
-    """WI-A — reproducible immuno image optimisation (white/black balance).
-
-    Provisional stand-in for the user's manual BW step; built modular so the exact MATLAB
-    white/black-balance can replace the body later without touching detection (A–F).
-    Steps, all logged: (1) large-scale background subtraction (Gaussian, ~2× pore diameter)
-    to flatten ridge/illumination; (2) percentile-clip contrast stretch (black/white balance);
-    (3) optional CLAHE. Detection runs on THIS image; CLAHE-for-display stays separate.
-    Returns (optimized_uint8, params)."""
+def optimize_imm(image_bgr, channel="red", valid=None, low=0.01, high=0.99,
+                 bg_sigma=0.0, clahe=False, pore_diam=None):
+    """WI-A — immuno white/black balance, ported from the lab MATLAB (OCT_FM2):
+    `imadjust(I, stretchlim(I,[low high]))` = a percentile-clip contrast stretch that sets
+    the black/white points. The stretch limits are taken WITHIN the selected region (`valid`,
+    WI-G) so the region drives the balance, mirroring the MATLAB ROI stretch. Optional
+    large-scale background subtraction (`bg_sigma>0`, off by default = faithful to MATLAB)
+    and optional CLAHE (display only). Detection runs on THIS image. Returns (uint8, params)."""
     gray = image_bgr[:, :, CHANNELS[channel]] if image_bgr.ndim == 3 else image_bgr
-    if bg_sigma is None:
-        d = pore_diam if pore_diam else 8.0
-        bg_sigma = float(max(6.0, 2.0 * d))
     f = gray.astype(np.float32)
-    bg = cv2.GaussianBlur(f, (0, 0), bg_sigma)
-    fg = np.clip(f - bg, 0, None)
-    lo, hi = np.percentile(fg, clip[0]), np.percentile(fg, clip[1])
-    out = np.clip((fg - lo) / (hi - lo + 1e-6) * 255.0, 0, 255).astype(np.uint8)
+    if bg_sigma and bg_sigma > 0:
+        f = np.clip(f - cv2.GaussianBlur(f, (0, 0), float(bg_sigma)), 0, None)
+    region = f[valid > 0] if valid is not None and np.any(valid) else f.ravel()
+    lo = float(np.percentile(region, low * 100.0))
+    hi = float(np.percentile(region, high * 100.0))
+    out = np.clip((f - lo) / (hi - lo + 1e-6) * 255.0, 0, 255).astype(np.uint8)
     if clahe:
         out = enhance(out)
-    params = {"method": "gaussian-bg-subtract+percentile-stretch",
-              "bg_sigma": round(bg_sigma, 1), "clip_pct": list(clip), "clahe": bool(clahe),
-              "note": "provisional default; replace with MATLAB white/black balance"}
+    params = {"method": "imadjust/stretchlim (MATLAB white/black balance)",
+              "stretch_low_high": [low, high], "bg_sigma": round(float(bg_sigma), 1),
+              "clahe": bool(clahe)}
     return out, params
 
 
@@ -172,21 +169,23 @@ def _split_merged(submask, min_dist):
 def detect_regions_imm(image_bgr, channel="red", region_mask=None, optimize=True,
                        pore_diam=None, min_area_frac=0.15, max_area_frac=6.0,
                        circularity_thresh=0.15, solidity_thresh=0.40, max_eccentricity=0.97,
-                       merged_blobs="split"):
+                       merged_blobs="split", bin_method="otsu", bin_thresh=200,
+                       close_radius=0, stretch_low=0.01, stretch_high=0.99):
     """Region/centroid immuno pore detection (WI-1 refined by annotation_improvement_plan).
 
-    Pipeline: optimise (WI-A) → estimate pore size (WI-B) → Otsu → connected components →
-    scale-aware size band + shape filters with logged rejection reasons (WI-C). Merged blobs
-    are either split (watershed) or rejected. `region_mask` (WI-G) restricts everything to a
-    user-selected area; if None the print body is used. Returns kept centroids + per-region
-    shape metrics AND a `rejections` list (reason per discarded blob) for auditing.
+    Pipeline: white/black balance (WI-A, MATLAB imadjust stretch) → estimate pore size (WI-B)
+    → binarise (Otsu, or MATLAB-style fixed threshold) → connected components → scale-aware
+    size band + shape filters with logged rejection reasons (WI-C). Merged blobs are split
+    (watershed) or rejected. `region_mask` (WI-G) restricts everything to a user-selected area;
+    if None the print body is used. Returns kept centroids + per-region shape metrics AND a
+    `rejections` list (reason per discarded blob) for auditing.
     """
     gray = image_bgr[:, :, CHANNELS[channel]] if image_bgr.ndim == 3 else image_bgr
     valid = (region_mask.astype(np.uint8) if region_mask is not None else _valid_print(gray))
 
     if optimize:
-        d0 = pore_diam or estimate_pore_diameter(gray, valid)
-        opt, opt_params = optimize_imm(gray, channel=channel, pore_diam=d0)
+        opt, opt_params = optimize_imm(gray, channel=channel, valid=valid,
+                                       low=stretch_low, high=stretch_high)
     else:
         opt, opt_params = gray, {"method": "none"}
 
@@ -196,9 +195,14 @@ def detect_regions_imm(image_bgr, channel="red", region_mask=None, optimize=True
     max_area = max_area_frac * med_area
     split_min_dist = max(3.0, 0.7 * diam)
 
-    vals = opt[valid > 0]
-    thr = float(threshold_otsu(vals)) if vals.size else 0.0
-    bw = (opt > thr) & (valid > 0)
+    if bin_method == "fixed":                         # MATLAB: grayImg > 240 after stretch
+        thr = float(bin_thresh)
+    else:
+        vals = opt[valid > 0]
+        thr = float(threshold_otsu(vals)) if vals.size else 0.0
+    bw = ((opt > thr) & (valid > 0)).astype(np.uint8)
+    if close_radius and close_radius > 0:             # MATLAB imclose(strel('disk',2))
+        bw = cv2.morphologyEx(bw, cv2.MORPH_CLOSE, disk(int(close_radius)).astype(np.uint8))
     lab = label(bw)
 
     kept, rej = [], []
@@ -236,7 +240,8 @@ def detect_regions_imm(image_bgr, channel="red", region_mask=None, optimize=True
                 params={"pore_diam_px": round(diam, 2), "min_area": round(min_area, 1),
                         "max_area": round(max_area, 1), "circularity_thresh": circularity_thresh,
                         "solidity_thresh": solidity_thresh, "max_eccentricity": max_eccentricity,
-                        "merged_blobs": merged_blobs, "otsu_thr": round(thr, 1),
+                        "merged_blobs": merged_blobs, "bin_method": bin_method,
+                        "threshold": round(thr, 1), "close_radius": close_radius,
                         "optimize": opt_params})
 
 

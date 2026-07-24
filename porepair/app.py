@@ -121,12 +121,26 @@ class Panel:
     def _on_slider(self, _):
         self._apply_pivot(self.z, float(self.rot_var.get()), (CW / 2, CH / 2))
 
+    def _drawing_region(self):
+        return self.side == "i" and getattr(self.app, "region_draw", False)
+
     # ---- mouse ----
     def _press(self, ev):
+        if self._drawing_region():                     # start rectangle ROI
+            ix, iy = self.canvas_to_img(ev.x, ev.y)
+            self.app._rect = [ix, iy, ix, iy]
+            self._down = None
+            self.render()
+            return
         self._down = (ev.x, ev.y)
         self._moved = False
 
     def _motion(self, ev):
+        if self._drawing_region() and self.app._rect is not None:
+            ix, iy = self.canvas_to_img(ev.x, ev.y)
+            self.app._rect[2], self.app._rect[3] = ix, iy
+            self.render()
+            return
         if not self._down:
             return
         dx, dy = ev.x - self._down[0], ev.y - self._down[1]
@@ -138,6 +152,9 @@ class Panel:
         self.render()
 
     def _release(self, ev):
+        if self._drawing_region() and self.app._rect is not None:
+            self.app.finish_region_rect()
+            return
         was_click = self._down is not None and not self._moved
         self._down = None
         if was_click and self.img is not None:
@@ -155,6 +172,8 @@ class Panel:
         self.canvas.delete("all")
         self.canvas.create_image(0, 0, anchor="nw", image=self._photo)
         self.app.draw_markers(self)
+        if self.side == "i":
+            self.app.draw_region(self)
 
 
 class App:
@@ -202,6 +221,9 @@ class App:
         ttk.Combobox(dc, textvariable=self.merged_var, values=["split", "reject"], width=7,
                      state="readonly").pack(side="left")
         tk.Button(dc, text="↻ her-detecteer immuno", command=self.redetect_imm).pack(side="left", padx=10)
+        self.bDraw = tk.Button(dc, text="▭ regio tekenen", command=self.toggle_region_draw)
+        self.bDraw.pack(side="left")
+        tk.Button(dc, text="✕ regio wissen", command=self.clear_region).pack(side="left")
         tk.Button(dc, text="regio-masker…", command=self.open_region_mask).pack(side="left")
         self.det_info = tk.Label(dc, text="", fg="#9cf", bg="#111")
         self.det_info.pack(side="left")
@@ -230,6 +252,8 @@ class App:
         self.det_i_reg = self.det_i_top = None
         self.imm_primary = "region"
         self.imm_region_mask = None
+        self.region_draw = False          # rectangle-ROI drawing mode on the immuno panel
+        self._rect = None                 # (x0,y0,x1,y1) in immuno image px while drawing
         self.pairs = []          # list of {"o":[x,y], "i":[x,y]}
         self.pending = None
         self.expect = "o"
@@ -287,6 +311,49 @@ class App:
 
     def redetect_imm(self):
         self._detect_imm(reset_view=False)
+
+    def toggle_region_draw(self):
+        if self.imm_bgr is None:
+            messagebox.showwarning("porepair", "Open eerst het immunolabel-beeld."); return
+        self.region_draw = not self.region_draw
+        self.bDraw.config(relief="sunken" if self.region_draw else "raised")
+        self.status.config(text="Regio tekenen: sleep een rechthoek op het immuno-beeld."
+                           if self.region_draw else "")
+
+    def draw_region(self, panel):
+        """draw the rectangle being drawn and/or the active region mask outline."""
+        rect = self._rect
+        if rect is not None:
+            (x0, y0), (x1, y1) = panel.img_to_canvas(rect[:2]), panel.img_to_canvas(rect[2:])
+            panel.canvas.create_rectangle(x0, y0, x1, y1, outline="#0ff", width=2)
+        elif self.imm_region_mask is not None:
+            ys, xs = np.where(self.imm_region_mask > 0)
+            if len(xs):
+                a = panel.img_to_canvas([xs.min(), ys.min()]); b = panel.img_to_canvas([xs.max(), ys.max()])
+                panel.canvas.create_rectangle(a[0], a[1], b[0], b[1], outline="#f80", width=1, dash=(4, 3))
+
+    def finish_region_rect(self):
+        r = self._rect
+        self._rect = None
+        self.region_draw = False
+        self.bDraw.config(relief="raised")
+        if r is None:
+            return
+        h, w = self.imm_bgr.shape[:2]
+        x0, x1 = sorted((int(np.clip(r[0], 0, w)), int(np.clip(r[2], 0, w))))
+        y0, y1 = sorted((int(np.clip(r[1], 0, h)), int(np.clip(r[3], 0, h))))
+        if x1 - x0 < 5 or y1 - y0 < 5:
+            self.pI.render(); return
+        mask = np.zeros((h, w), np.uint8)
+        mask[y0:y1, x0:x1] = 1
+        self.imm_region_mask = mask
+        self._detect_imm(reset_view=False)
+
+    def clear_region(self):
+        self.imm_region_mask = None
+        self._rect = None
+        if self.imm_bgr is not None:
+            self._detect_imm(reset_view=False)
 
     def open_region_mask(self):
         """WI-G: load a region mask (nonzero = detect here), e.g. geselecteerd_gebied_bw.jpg."""

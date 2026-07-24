@@ -50,7 +50,9 @@ def cmd_detect(args):
     i_reg = D.detect_regions_imm(imm_bgr, channel=args.imm_channel, region_mask=region_mask,
                                  min_area_frac=args.imm_min_area_frac, max_area_frac=args.imm_max_area_frac,
                                  circularity_thresh=args.imm_circularity, solidity_thresh=args.imm_solidity,
-                                 max_eccentricity=args.imm_eccentricity, merged_blobs=args.merged_blobs)
+                                 max_eccentricity=args.imm_eccentricity, merged_blobs=args.merged_blobs,
+                                 bin_method=args.imm_bin, bin_thresh=args.imm_bin_thresh,
+                                 close_radius=args.imm_close)
     primary = i_reg if args.imm_detect == "region" else i_top
     reasons = {}
     for r in i_reg["rejections"]:
@@ -142,6 +144,10 @@ def main(argv=None):
     d.add_argument("--imm-circularity", type=float, default=0.15, help="region: min circularity")
     d.add_argument("--imm-solidity", type=float, default=0.40, help="region: min solidity")
     d.add_argument("--imm-eccentricity", type=float, default=0.97, help="region: max eccentricity")
+    d.add_argument("--imm-bin", default="otsu", choices=["otsu", "fixed"],
+                   help="binarisation: otsu (robust) or fixed threshold (MATLAB, after stretch)")
+    d.add_argument("--imm-bin-thresh", type=int, default=200, help="fixed binarisation threshold (0-255)")
+    d.add_argument("--imm-close", type=int, default=0, help="morphological close radius (MATLAB used 2)")
     d.add_argument("--min-dist", type=int, default=14)
     d.add_argument("--oct-thr", type=float, default=None, help="fixed threshold (default: adaptive)")
     d.add_argument("--imm-thr", type=float, default=None)

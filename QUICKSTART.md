@@ -24,8 +24,10 @@ Stappen in het venster:
 
 1. **1. Open OCT…** — kies het OCT-beeld (poriën = witte puntjes; worden meteen gedetecteerd).
 2. **2. Open immunolabel…** — kies het immuno-beeld (poriën = rode kralen).
-3. **(optioneel) regio-masker…** — kies een maskerbeeld zodat detectie alléén binnen dat
-   gebied draait. Aanbevolen: op het volledige ruwe beeld overdetecteert het (ridges).
+3. **Regio afbakenen** — klik **▭ regio tekenen** en sleep een rechthoek op het immuno-beeld
+   (of **regio-masker…** om een maskerbeeld te laden). Detectie draait alléén binnen die regio —
+   aanbevolen, want op het volledige ruwe beeld overdetecteert het (ridges). **✕ regio wissen** reset.
+   De immuno-optimalisatie (wit/zwart-balans) is de MATLAB `imadjust`/`stretchlim`-stretch.
 4. **Immuno-detectie tunen** — pas **circ / min-frac / max-frac** aan, kies **merged = split/reject**,
    klik **↻ her-detecteer immuno**. Herhaal tot de poriën goed gemarkeerd staan (verschilt per beeld).
 5. **Ankerpunten klikken** — klik een herkenbaar punt in **OCT** (links), dan hetzelfde in
