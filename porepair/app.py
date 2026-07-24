@@ -269,22 +269,24 @@ class App:
     def _build_step1(self):
         f = tk.Frame(self.container, bg="#111")
         self.f1 = f
-        bar = tk.Frame(f, bg="#111"); bar.pack(fill="x", padx=6, pady=4)
+        bar = tk.Frame(f, bg="#111"); bar.pack(side="top", fill="x", padx=6, pady=4)
         tk.Button(bar, text="Open OCT…", command=self.open_oct).pack(side="left")
         self.l1_oct = tk.Label(bar, text="(geen bestand)", fg="#ccc", bg="#111"); self.l1_oct.pack(side="left", padx=(6, 20))
         tk.Button(bar, text="Open immunolabel…", command=self.open_imm).pack(side="left")
         self.l1_imm = tk.Label(bar, text="(geen bestand)", fg="#ccc", bg="#111"); self.l1_imm.pack(side="left", padx=6)
 
-        mid = tk.Frame(f, bg="#111"); mid.pack(fill="both", expand=True, padx=6, pady=4)
+        # nav bar anchored at the bottom BEFORE the (expanding) image area, so it can never
+        # be pushed off-screen when the canvases are large (e.g. HiDPI displays)
+        bot = tk.Frame(f, bg="#111"); bot.pack(side="bottom", fill="x", padx=8, pady=6)
+        self.b1_next = tk.Button(bot, text="Volgende: overlay maken →", command=lambda: self.goto_step(2),
+                                 bg="#0a3d62", fg="white", state="disabled")
+        self.b1_next.pack(side="right")
+
+        mid = tk.Frame(f, bg="#111"); mid.pack(side="top", fill="both", expand=True, padx=6, pady=4)
         self.p1_oct = Panel(mid, "OCT", "o", self)
         self.p1_imm = Panel(mid, "immunolabel", "i", self)
         self.p1_oct.frame.pack(side="left", padx=4)
         self.p1_imm.frame.pack(side="left", padx=4)
-
-        bot = tk.Frame(f, bg="#111"); bot.pack(fill="x", padx=8, pady=6)
-        self.b1_next = tk.Button(bot, text="Volgende: overlay maken →", command=lambda: self.goto_step(2),
-                                 bg="#0a3d62", fg="white", state="disabled")
-        self.b1_next.pack(side="right")
 
     def open_oct(self):
         p = filedialog.askopenfilename(title="Kies OCT-beeld",
@@ -333,15 +335,15 @@ class App:
         hint = tk.Label(self.f2_pick,
                         text="Klik een herkenbaar punt in OCT, dan hetzelfde punt in immunolabel. 4-8 paren, goed verspreid.",
                         fg="#bbb", bg="#111", wraplength=1100, justify="left")
-        hint.pack(fill="x", padx=8, pady=(4, 0))
-        mid = tk.Frame(self.f2_pick, bg="#111"); mid.pack(fill="both", expand=True, padx=6, pady=4)
-        self.p2_oct = Panel(mid, "OCT — klik ankerpunten", "o", self)
-        self.p2_imm = Panel(mid, "immunolabel — klik hetzelfde punt", "i", self)
-        self.p2_oct.mode = self.p2_imm.mode = "pick"
-        self.p2_oct.frame.pack(side="left", padx=4)
-        self.p2_imm.frame.pack(side="left", padx=4)
+        hint.pack(side="top", fill="x", padx=8, pady=(4, 0))
 
-        ctr = tk.Frame(self.f2_pick, bg="#111"); ctr.pack(fill="x", padx=8, pady=2)
+        bot1 = tk.Frame(self.f2_pick, bg="#111"); bot1.pack(side="bottom", fill="x", padx=8, pady=6)
+        tk.Button(bot1, text="← Terug naar beelden", command=lambda: self.goto_step(1)).pack(side="left")
+        self.b2_compute = tk.Button(bot1, text="Bereken overlay →", command=self.compute_overlay,
+                                    bg="#0a3d62", fg="white", state="disabled")
+        self.b2_compute.pack(side="right")
+
+        ctr = tk.Frame(self.f2_pick, bg="#111"); ctr.pack(side="bottom", fill="x", padx=8, pady=2)
         tk.Button(ctr, text="↶ punt terug", command=self.undo_pair).pack(side="left")
         tk.Button(ctr, text="wis punten", command=self.clear_pairs).pack(side="left", padx=4)
         self.l2_pairs = tk.Label(ctr, text="0 puntenparen", fg="#ccc", bg="#111"); self.l2_pairs.pack(side="left", padx=12)
@@ -353,23 +355,24 @@ class App:
         ttk.Combobox(ctr, textvariable=self.tf_var, values=["affine", "similarity", "tps"],
                      width=10, state="readonly").pack(side="left")
 
-        bot1 = tk.Frame(self.f2_pick, bg="#111"); bot1.pack(fill="x", padx=8, pady=6)
-        tk.Button(bot1, text="← Terug naar beelden", command=lambda: self.goto_step(1)).pack(side="left")
-        self.b2_compute = tk.Button(bot1, text="Bereken overlay →", command=self.compute_overlay,
-                                    bg="#0a3d62", fg="white", state="disabled")
-        self.b2_compute.pack(side="right")
+        mid = tk.Frame(self.f2_pick, bg="#111"); mid.pack(side="top", fill="both", expand=True, padx=6, pady=4)
+        self.p2_oct = Panel(mid, "OCT — klik ankerpunten", "o", self)
+        self.p2_imm = Panel(mid, "immunolabel — klik hetzelfde punt", "i", self)
+        self.p2_oct.mode = self.p2_imm.mode = "pick"
+        self.p2_oct.frame.pack(side="left", padx=4)
+        self.p2_imm.frame.pack(side="left", padx=4)
 
         # -- review sub-view --
         self.f2_review = tk.Frame(f, bg="#111")
-        rmid = tk.Frame(self.f2_review, bg="#111"); rmid.pack(fill="both", expand=True, padx=6, pady=4)
-        self.p2_overlay = Panel(rmid, "Overlay (OCT magenta op immuno groen; oranje = overeenkomend gebied)", "o", self)
-        self.p2_overlay.frame.pack(padx=4)
-        self.l2_stats = tk.Label(self.f2_review, text="", fg="#ccc", bg="#111", justify="left", anchor="w")
-        self.l2_stats.pack(fill="x", padx=10)
-        bot2 = tk.Frame(self.f2_review, bg="#111"); bot2.pack(fill="x", padx=8, pady=6)
+        bot2 = tk.Frame(self.f2_review, bg="#111"); bot2.pack(side="bottom", fill="x", padx=8, pady=6)
         tk.Button(bot2, text="← Punten aanpassen", command=self._show_step2_pick).pack(side="left")
         tk.Button(bot2, text="Volgende: poriën detecteren →", command=lambda: self.goto_step(3),
                  bg="#0a3d62", fg="white").pack(side="right")
+        self.l2_stats = tk.Label(self.f2_review, text="", fg="#ccc", bg="#111", justify="left", anchor="w")
+        self.l2_stats.pack(side="bottom", fill="x", padx=10)
+        rmid = tk.Frame(self.f2_review, bg="#111"); rmid.pack(side="top", fill="both", expand=True, padx=6, pady=4)
+        self.p2_overlay = Panel(rmid, "Overlay (OCT magenta op immuno groen; oranje = overeenkomend gebied)", "o", self)
+        self.p2_overlay.frame.pack(padx=4)
 
         self.f2_pick.pack(fill="both", expand=True)   # default sub-view
 
@@ -523,14 +526,12 @@ class App:
         tk.Button(dc2, text="✓ sluit", command=self.finish_poly).pack(side="left")
         tk.Button(dc2, text="✕ wissen", command=self.clear_manual_mask).pack(side="left")
 
-        mid = tk.Frame(f, bg="#111"); mid.pack(fill="both", expand=True, padx=6, pady=4)
-        self.p3_oct = Panel(mid, "OCT — gedetecteerde poriën", "o", self)
-        self.p3_imm = Panel(mid, "immunolabel — gedetecteerde poriën", "i", self)
-        self.p3_imm.mode = "region"
-        self.p3_oct.frame.pack(side="left", padx=4)
-        self.p3_imm.frame.pack(side="left", padx=4)
+        bot = tk.Frame(f, bg="#111"); bot.pack(side="bottom", fill="x", padx=8, pady=6)
+        tk.Button(bot, text="← Terug naar overlay", command=lambda: self.goto_step(2)).pack(side="left")
+        tk.Button(bot, text="Analyse + opslaan", command=self.run_analysis,
+                 bg="#0a3d62", fg="white").pack(side="right")
 
-        settings = tk.Frame(f, bg="#111"); settings.pack(fill="x", padx=8, pady=2)
+        settings = tk.Frame(f, bg="#111"); settings.pack(side="bottom", fill="x", padx=8, pady=2)
         tk.Label(settings, text="match k:", fg="#ccc", bg="#111").pack(side="left")
         self.margin_k = tk.StringVar(value="0.5")
         tk.Entry(settings, textvariable=self.margin_k, width=4).pack(side="left", padx=(2, 10))
@@ -543,10 +544,12 @@ class App:
         ttk.Combobox(settings, textvariable=self.match_method, values=["mutual-nn", "matlab"],
                      width=10, state="readonly").pack(side="left")
 
-        bot = tk.Frame(f, bg="#111"); bot.pack(fill="x", padx=8, pady=6)
-        tk.Button(bot, text="← Terug naar overlay", command=lambda: self.goto_step(2)).pack(side="left")
-        tk.Button(bot, text="Analyse + opslaan", command=self.run_analysis,
-                 bg="#0a3d62", fg="white").pack(side="right")
+        mid = tk.Frame(f, bg="#111"); mid.pack(side="top", fill="both", expand=True, padx=6, pady=4)
+        self.p3_oct = Panel(mid, "OCT — gedetecteerde poriën", "o", self)
+        self.p3_imm = Panel(mid, "immunolabel — gedetecteerde poriën", "i", self)
+        self.p3_imm.mode = "region"
+        self.p3_oct.frame.pack(side="left", padx=4)
+        self.p3_imm.frame.pack(side="left", padx=4)
 
     def _effective_mask(self):
         if self.aoi_mask is None:
@@ -781,11 +784,17 @@ class App:
 
 
 def main():
+    global CW, CH
     root = tk.Tk()
     try:
         root.state("zoomed")
     except Exception:
         pass
+    # size the two side-by-side canvases to the actual screen so nothing overflows
+    root.update_idletasks()
+    sw, sh = root.winfo_screenwidth(), root.winfo_screenheight()
+    CH = int(max(320, min(680, sh - 320)))       # leave room for stepper/status/toolbars/nav/taskbar
+    CW = int(max(340, min(CH * 0.95, sw / 2 - 60)))
     App(root)
     root.mainloop()
 
